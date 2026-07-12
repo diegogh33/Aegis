@@ -1,12 +1,18 @@
-from app.core.evaluation_report import EvaluationReport
+from __future__ import annotations
+
+from abc import ABC
+
+from app.core.criterion_report import CriterionReport
 from app.models.investment_candidate import InvestmentCandidate
 from app.rules.base import Rule
 
 
-class RuleEngine:
+class Criterion(ABC):
     """
-    Executes every registered rule against an investment candidate.
+    A Criterion groups related business rules.
     """
+
+    name: str
 
     def __init__(self, rules: list[Rule]):
         self.rules = rules
@@ -14,9 +20,9 @@ class RuleEngine:
     def evaluate(
         self,
         candidate: InvestmentCandidate,
-    ) -> EvaluationReport:
+    ) -> CriterionReport:
 
-        report = EvaluationReport()
+        report = CriterionReport(name=self.name)
 
         for rule in self.rules:
             report.results.append(

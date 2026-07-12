@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from app.core.rule_status import RuleStatus
 from app.core.types import Score
 
 
@@ -11,10 +12,22 @@ class RuleResult:
 
     rule_id: str
 
-    passed: bool
+    status: RuleStatus
 
     score: Score
 
     message: str
 
     blocker: bool = False
+
+    @property
+    def passed(self) -> bool:
+        return self.status is RuleStatus.PASS
+
+    @property
+    def warning(self) -> bool:
+        return self.status is RuleStatus.WARNING
+
+    @property
+    def failed(self) -> bool:
+        return self.status is RuleStatus.FAIL

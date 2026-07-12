@@ -1,26 +1,23 @@
+from __future__ import annotations
+
+from abc import ABC
+
 from app.core.evaluation_report import EvaluationReport
+from app.core.rule_engine import RuleEngine
 from app.models.investment_candidate import InvestmentCandidate
 from app.rules.base import Rule
 
 
-class RuleEngine:
+class Strategy(ABC):
     """
-    Executes every registered rule against an investment candidate.
+    Base class for every investment strategy.
     """
 
     def __init__(self, rules: list[Rule]):
-        self.rules = rules
+        self._engine = RuleEngine(rules)
 
     def evaluate(
         self,
         candidate: InvestmentCandidate,
     ) -> EvaluationReport:
-
-        report = EvaluationReport()
-
-        for rule in self.rules:
-            report.results.append(
-                rule.evaluate(candidate)
-            )
-
-        return report
+        return self._engine.evaluate(candidate)
