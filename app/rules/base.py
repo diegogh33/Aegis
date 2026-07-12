@@ -1,10 +1,15 @@
-from abc import ABC
-from abc import abstractmethod
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
 
 from app.core.result import RuleResult
+from app.models.investment_candidate import InvestmentCandidate
 
 
 class Rule(ABC):
+    """
+    Base class for every business rule.
+    """
 
     id: str
 
@@ -15,5 +20,11 @@ class Rule(ABC):
     blocker: bool = False
 
     @abstractmethod
-    def evaluate(self, candidate) -> RuleResult:
-        ...
+    def evaluate(
+        self,
+        candidate: InvestmentCandidate,
+    ) -> RuleResult:
+        """
+        Evaluates an investment candidate.
+        """
+        raise NotImplementedError

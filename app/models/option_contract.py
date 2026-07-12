@@ -1,23 +1,30 @@
+from __future__ import annotations
+
 from datetime import date
 
 from pydantic import BaseModel
 
+from app.core.types import Money
+
 
 class OptionContract(BaseModel):
+    """
+    Represents an option contract.
+    """
 
     ticker: str
 
     expiration: date
 
-    strike: float
+    strike: Money
 
     option_type: str
 
-    bid: float
+    bid: Money
 
-    ask: float
+    ask: Money
 
-    last: float | None = None
+    last: Money | None = None
 
     delta: float | None = None
 
