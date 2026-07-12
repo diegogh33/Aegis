@@ -1,0 +1,33 @@
+version: 1
+
+cash_secured_put:
+
+  delta:
+
+    preferred:
+
+      min: -0.25
+
+      max: -0.15
+
+    warning:
+
+      min: -0.35
+
+  earnings:
+
+    minimum_days: 14
+
+  liquidity:
+
+    minimum_open_interest: 500
+
+    minimum_volume: 50
+
+  spread:
+
+    maximum_percent: 5
+
+  premium:
+
+    minimum_annualized_return: 12
