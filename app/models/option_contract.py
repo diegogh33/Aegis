@@ -8,33 +8,55 @@ from decimal import Decimal
 @dataclass(slots=True, frozen=True)
 class OptionContract:
     """
-    Represents an option contract within the Aegis domain.
+    Provider-agnostic option contract.
 
-    This model is provider-agnostic. Any market data provider
-    (Alpha Vantage, IBKR, Polygon, etc.) must map its own data
-    into this structure.
+    This is the only option model used inside Aegis.
+    Any provider (IBKR, Polygon, Tradier, etc.) must map
+    its own data into this model.
     """
 
+    # ------------------------------------------------------------------
     # Underlying
+    # ------------------------------------------------------------------
+
     underlying: str
 
+    # ------------------------------------------------------------------
     # Contract
+    # ------------------------------------------------------------------
+
+    local_symbol: str
+
+    con_id: int
+
     option_type: str  # "put" | "call"
 
     expiration: date
 
     strike: Decimal
 
-    # Prices
-    bid: Decimal
+    exchange: str
 
-    ask: Decimal
+    currency: str
+
+    multiplier: int
+
+    # ------------------------------------------------------------------
+    # Prices
+    # ------------------------------------------------------------------
+
+    bid: Decimal | None
+
+    ask: Decimal | None
 
     last: Decimal | None
 
-    mark: Decimal
+    mark: Decimal | None
 
+    # ------------------------------------------------------------------
     # Greeks
+    # ------------------------------------------------------------------
+
     delta: Decimal | None
 
     gamma: Decimal | None
@@ -45,7 +67,10 @@ class OptionContract:
 
     implied_volatility: Decimal | None
 
+    # ------------------------------------------------------------------
     # Liquidity
-    volume: int
+    # ------------------------------------------------------------------
 
-    open_interest: int
+    volume: int | None
+
+    open_interest: int | None
