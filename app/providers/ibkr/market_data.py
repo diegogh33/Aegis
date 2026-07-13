@@ -16,28 +16,69 @@ class MarketDataProvider:
     def __init__(self, ib: IB) -> None:
         self.ib = ib
 
+    @staticmethod
+    def _decimal(value) -> Decimal | None:
+
+        if value is None:
+            return None
+
+        try:
+
+            value = float(value)
+
+            if value <= 0:
+                return None
+
+            return Decimal(str(value))
+
+        except Exception:
+            return None
+
     async def get(self, contract) -> MarketData:
 
         ticker: Ticker = self.ib.reqMktData(contract)
 
-        # Esperamos a que lleguen los primeros ticks
+        # Esperamos a que IBKR complete la información
         await asyncio.sleep(2)
 
-        bid = (
-            Decimal(str(ticker.bid))
-            if ticker.bid is not None and ticker.bid > 0
+        greeks = ticker.modelGreeks
+
+        bid = self._decimal(ticker.bid)
+        ask = self._decimal(ticker.ask)
+        last = self._decimal(ticker.last)
+
+        if bid is not None and ask is not None:
+            mark = (bid + ask) / Decimal("2")
+        else:
+            mark = None
+
+        delta = (
+            Decimal(str(greeks.delta))
+            if greeks and greeks.delta is not None
             else None
         )
 
-        ask = (
-            Decimal(str(ticker.ask))
-            if ticker.ask is not None and ticker.ask > 0
+        gamma = (
+            Decimal(str(greeks.gamma))
+            if greeks and greeks.gamma is not None
             else None
         )
 
-        last = (
-            Decimal(str(ticker.last))
-            if ticker.last is not None and ticker.last > 0
+        theta = (
+            Decimal(str(greeks.theta))
+            if greeks and greeks.theta is not None
+            else None
+        )
+
+        vega = (
+            Decimal(str(greeks.vega))
+            if greeks and greeks.vega is not None
+            else None
+        )
+
+        implied_volatility = (
+            Decimal(str(greeks.impliedVol))
+            if greeks and greeks.impliedVol is not None
             else None
         )
 
@@ -47,12 +88,12 @@ class MarketDataProvider:
             bid=bid,
             ask=ask,
             last=last,
-            mark=None,
-            delta=None,
-            gamma=None,
-            theta=None,
-            vega=None,
-            implied_volatility=None,
+            mark=mark,
+            delta=delta,
+            gamma=gamma,
+            theta=theta,
+            vega=vega,
+            implied_volatility=implied_volatility,
             volume=ticker.volume,
             open_interest=None,
         )

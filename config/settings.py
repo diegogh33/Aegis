@@ -1,36 +1,43 @@
 from __future__ import annotations
 
-import os
+from pathlib import Path
 
-from dotenv import load_dotenv
-
-load_dotenv()
+import yaml
 
 
 class Settings:
     """
-    Central application settings.
-
-    Environment variables are loaded only once from the .env file.
-    The rest of the application should access configuration through
-    this object instead of calling os.getenv().
+    Loads the Aegis Constitution.
     """
 
-    def __init__(self) -> None:
-        self.alphavantage_api_key = self._get_required(
-            "ALPHAVANTAGE_API_KEY"
-        )
+    def __init__(
+        self,
+        path: str = "config/constitution.yaml",
+    ) -> None:
 
-    @staticmethod
-    def _get_required(name: str) -> str:
-        value = os.getenv(name)
+        with Path(path).open(
+            "r",
+            encoding="utf-8",
+        ) as file:
 
-        if not value:
-            raise RuntimeError(
-                f"Missing required environment variable: {name}"
-            )
+            self.data = yaml.safe_load(file)
+
+    def get(
+        self,
+        *keys,
+        default=None,
+    ):
+
+        value = self.data
+
+        for key in keys:
+
+            if not isinstance(value, dict):
+                return default
+
+            value = value.get(key)
+
+            if value is None:
+                return default
 
         return value
-
-
-settings = Settings()

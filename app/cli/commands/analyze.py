@@ -1,16 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date, timedelta
-from decimal import Decimal
 
 from rich.console import Console
 from rich.table import Table
 
-from app.engines.hard_filter_engine import HardFilterEngine
-from app.models.option_contract import OptionContract
 from app.providers.alphavantage.provider import AlphaVantageProvider
 from app.providers.ibkr.provider import IBKRProvider
+from app.services.analysis_service import AnalysisService
 
 console = Console()
 
@@ -21,8 +18,8 @@ def analyze(ticker: str) -> None:
 
 async def _analyze(ticker: str) -> None:
 
-    alpha_provider = AlphaVantageProvider()
-    ibkr_provider = IBKRProvider()
+    alpha = AlphaVantageProvider()
+    ibkr = IBKRProvider()
 
     try:
 
@@ -30,104 +27,18 @@ async def _analyze(ticker: str) -> None:
 
         console.print("[bold]Connecting to IBKR...[/]")
 
-        await ibkr_provider.connect()
+        await ibkr.connect()
 
-        console.print("[green]✓ Connected to IBKR[/]")
+        console.print("[green]✓ Connected[/]")
 
-        option_chain = await ibkr_provider.get_option_chain(ticker)
-
-        console.print()
-
-        table = Table(title="Option Chain")
-
-        table.add_column("Exchange")
-        table.add_column("Expirations", justify="right")
-        table.add_column("Strikes", justify="right")
-
-        table.add_row(
-            option_chain["exchange"],
-            str(len(option_chain["expirations"])),
-            str(len(option_chain["strikes"])),
+        service = AnalysisService(
+            alpha_provider=alpha,
+            ibkr_provider=ibkr,
         )
 
-        console.print(table)
+        result = await service.analyze(ticker)
 
-        put_contracts = await ibkr_provider.get_put_contracts(ticker)
-
-        console.print(
-            f"\nFound [bold]{len(put_contracts)}[/] PUT contracts."
-        )
-
-        if put_contracts:
-
-            first = put_contracts[0]
-
-            market = await ibkr_provider.get_market_data(first)
-
-            table = Table(title="First PUT Contract")
-
-            table.add_column("Field")
-            table.add_column("Value")
-
-            table.add_row("Local Symbol", first.local_symbol)
-            table.add_row("Expiration", str(first.expiration))
-            table.add_row("Strike", str(first.strike))
-            table.add_row("Type", first.option_type.upper())
-
-            table.add_row(
-                "Bid",
-                "-" if market.bid is None else str(market.bid),
-            )
-
-            table.add_row(
-                "Ask",
-                "-" if market.ask is None else str(market.ask),
-            )
-
-            table.add_row(
-                "Last",
-                "-" if market.last is None else str(market.last),
-            )
-
-            table.add_row(
-                "Volume",
-                "-" if market.volume is None else str(market.volume),
-            )
-
-            console.print()
-            console.print(table)
-
-        company = await alpha_provider.get_company(ticker)
-
-        option = OptionContract(
-            underlying=company.symbol,
-            local_symbol="",
-            con_id=0,
-            option_type="put",
-            expiration=date.today() + timedelta(days=30),
-            strike=Decimal("0"),
-            exchange="SMART",
-            currency="USD",
-            multiplier=100,
-            bid=None,
-            ask=None,
-            last=None,
-            mark=None,
-            delta=None,
-            gamma=None,
-            theta=None,
-            vega=None,
-            implied_volatility=None,
-            volume=None,
-            open_interest=None,
-        )
-
-        engine = HardFilterEngine()
-
-        results = engine.evaluate(
-            company=company,
-            option=option,
-        )
+        company = result.company
 
         company_table = Table(title="Company")
 
@@ -144,26 +55,39 @@ async def _analyze(ticker: str) -> None:
         console.print()
         console.print(company_table)
 
-        filters = Table(title="Hard Filters")
+        options = Table(title="Best PUT Candidates")
 
-        filters.add_column("Status")
-        filters.add_column("Filter")
+        options.add_column("Score", justify="right")
+        options.add_column("Strike", justify="right")
+        options.add_column("Expiration")
+        options.add_column("Bid", justify="right")
+        options.add_column("Ask", justify="right")
+        options.add_column("Delta", justify="right")
+        options.add_column("IV", justify="right")
+        options.add_column("Volume", justify="right")
 
-        for result in results:
+        for scored in result.contracts:
 
-            icon = "✅" if result.status.value == "passed" else "❌"
+            option = scored.option
+            score = scored.score
 
-            filters.add_row(
-                icon,
-                result.name,
+            options.add_row(
+                f"{score.total:.1f}",
+                str(option.strike),
+                str(option.expiration),
+                "-" if option.bid is None else f"{option.bid:.2f}",
+                "-" if option.ask is None else f"{option.ask:.2f}",
+                "-" if option.delta is None else f"{option.delta:.3f}",
+                "-" if option.implied_volatility is None else f"{option.implied_volatility:.2%}",
+                "-" if option.volume is None else str(int(option.volume)),
             )
 
         console.print()
-        console.print(filters)
+        console.print(options)
 
         console.print("\n[bold green]Analysis completed[/]")
 
     finally:
 
-        await alpha_provider.close()
-        await ibkr_provider.disconnect()
+        await alpha.close()
+        await ibkr.disconnect()

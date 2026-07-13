@@ -5,13 +5,10 @@ cash_secured_put:
   delta:
 
     preferred:
-
       min: -0.25
-
       max: -0.15
 
     warning:
-
       min: -0.35
 
   earnings:
@@ -21,7 +18,6 @@ cash_secured_put:
   liquidity:
 
     minimum_open_interest: 500
-
     minimum_volume: 50
 
   spread:
@@ -31,3 +27,24 @@ cash_secured_put:
   premium:
 
     minimum_annualized_return: 12
+
+  scoring:
+
+    delta:
+      target: 0.20
+      weight: 30
+
+    spread:
+      weight: 15
+      max_percentage: 0.20
+
+    volume:
+      weight: 10
+      normalization: 100
+
+    premium:
+      weight: 10
+
+    annualized_return:
+      weight: 35
+      target: 15
