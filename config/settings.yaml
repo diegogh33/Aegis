@@ -1,0 +1,11 @@
+providers:
+
+  alphavantage:
+
+    api_key: ${ALPHAVANTAGE_API_KEY}
+
+cache:
+
+  enabled: true
+
+  ttl_minutes: 15
