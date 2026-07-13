@@ -29,8 +29,18 @@ async def _analyze(ticker: str) -> None:
         console.print("[bold]Connecting to IBKR...[/]")
 
         await ibkr_provider.connect()
-
+        
         console.print("[green]✓ Connected to IBKR[/]")
+
+        option_chain = await ibkr_provider.get_option_chain(ticker)
+
+        console.print()
+        console.print("[bold]Option Chain[/]")
+
+        console.print(f"Exchange    : {option_chain['exchange']}")
+        console.print(f"Expirations : {len(option_chain['expirations'])}")
+        console.print(f"Strikes     : {len(option_chain['strikes'])}")
+
 
         company = await alpha_provider.get_company(ticker)
 
