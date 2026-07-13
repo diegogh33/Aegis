@@ -1,41 +1,51 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date
-
-from pydantic import BaseModel
-
-from app.core.types import Money
+from decimal import Decimal
 
 
-class OptionContract(BaseModel):
+@dataclass(slots=True, frozen=True)
+class OptionContract:
     """
-    Represents an option contract.
+    Represents an option contract within the Aegis domain.
+
+    This model is provider-agnostic. Any market data provider
+    (Alpha Vantage, IBKR, Polygon, etc.) must map its own data
+    into this structure.
     """
 
-    ticker: str
+    # Underlying
+    underlying: str
+
+    # Contract
+    option_type: str  # "put" | "call"
 
     expiration: date
 
-    strike: Money
+    strike: Decimal
 
-    option_type: str
+    # Prices
+    bid: Decimal
 
-    bid: Money
+    ask: Decimal
 
-    ask: Money
+    last: Decimal | None
 
-    last: Money | None = None
+    mark: Decimal
 
-    delta: float | None = None
+    # Greeks
+    delta: Decimal | None
 
-    gamma: float | None = None
+    gamma: Decimal | None
 
-    theta: float | None = None
+    theta: Decimal | None
 
-    vega: float | None = None
+    vega: Decimal | None
 
-    implied_volatility: float | None = None
+    implied_volatility: Decimal | None
 
-    open_interest: int | None = None
+    # Liquidity
+    volume: int
 
-    volume: int | None = None
+    open_interest: int

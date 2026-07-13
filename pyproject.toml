@@ -1,7 +1,7 @@
 [project]
 name = "investment-engine"
 version = "0.1.0"
-description = "Add your description here"
+description = "Investment analysis engine focused on long-term value investing and options strategies."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -23,5 +23,6 @@ dev = [
     "pytest-cov>=7.1.0",
     "ruff>=0.15.21",
 ]
+
 [project.scripts]
-aegis = "app.cli.main:app"
+aegis = "app.main:app"

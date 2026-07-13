@@ -1,32 +1,34 @@
-from datetime import date
+from __future__ import annotations
+
 from decimal import Decimal
 
-from app.models.option_contract import OptionContract
-from app.providers.alphavantage.dto import AlphaVantageOptionDTO
+from app.models.company import Company
 
 
 class AlphaVantageMapper:
     """
-    Maps Alpha Vantage DTOs into domain models.
+    Converts Alpha Vantage JSON responses into domain models.
     """
 
     @staticmethod
-    def to_option_contract(
-        dto: AlphaVantageOptionDTO,
-    ) -> OptionContract:
+    def company(data: dict) -> Company:
+        def decimal_or_none(value: str | None) -> Decimal | None:
+            if not value or value == "None":
+                return None
 
-        return OptionContract(
-            ticker=dto.symbol,
-            expiration=date.fromisoformat(dto.expiration),
-            strike=Decimal(dto.strike),
-            option_type=dto.option_type,
-            bid=Decimal(dto.bid),
-            ask=Decimal(dto.ask),
-            delta=dto.delta,
-            gamma=dto.gamma,
-            theta=dto.theta,
-            vega=dto.vega,
-            implied_volatility=dto.implied_volatility,
-            open_interest=dto.open_interest,
-            volume=dto.volume,
+            return Decimal(value)
+
+        return Company(
+            symbol=data["Symbol"],
+            name=data["Name"],
+            currency=data["Currency"],
+            exchange=data["Exchange"],
+            sector=data["Sector"],
+            industry=data["Industry"],
+            country=data["Country"],
+            market_cap=int(data["MarketCapitalization"]),
+            pe_ratio=decimal_or_none(data.get("PERatio")),
+            eps=decimal_or_none(data.get("EPS")),
+            dividend_yield=decimal_or_none(data.get("DividendYield")),
+            description=data["Description"],
         )

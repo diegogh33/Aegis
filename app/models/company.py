@@ -1,46 +1,34 @@
 from __future__ import annotations
 
-from datetime import date
-
-from pydantic import BaseModel, Field
-
-from app.core.types import Money
+from dataclasses import dataclass
+from decimal import Decimal
 
 
-class Company(BaseModel):
+@dataclass(slots=True, frozen=True)
+class Company:
     """
-    Represents objective information about a company.
-
-    This model must never contain subjective investment decisions
-    or strategy-specific information.
+    Represents a company listed in the market.
     """
 
-    # ------------------------------------------------------------------
-    # Identity
-    # ------------------------------------------------------------------
+    symbol: str
+    name: str
 
-    ticker: str = Field(..., description="Company ticker symbol")
-    name: str | None = None
+    currency: str
 
-    # ------------------------------------------------------------------
-    # Classification
-    # ------------------------------------------------------------------
+    exchange: str
 
-    sector: str | None = None
-    industry: str | None = None
+    sector: str
 
-    # ------------------------------------------------------------------
-    # Market data
-    # ------------------------------------------------------------------
+    industry: str
 
-    currency: str = "USD"
+    country: str
 
-    current_price: Money | None = None
+    market_cap: int
 
-    market_cap: Money | None = None
+    pe_ratio: Decimal | None
 
-    # ------------------------------------------------------------------
-    # Events
-    # ------------------------------------------------------------------
+    eps: Decimal | None
 
-    next_earnings: date | None = None
+    dividend_yield: Decimal | None
+
+    description: str

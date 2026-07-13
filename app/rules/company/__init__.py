@@ -1,0 +1,3 @@
+"""
+Company related investment rules.
+"""
