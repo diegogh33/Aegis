@@ -9,6 +9,7 @@ from rich.console import Console
 from app.engines.hard_filter_engine import HardFilterEngine
 from app.models.option_contract import OptionContract
 from app.providers.alphavantage.provider import AlphaVantageProvider
+from app.providers.ibkr.provider import IBKRProvider
 
 console = Console()
 
@@ -19,10 +20,19 @@ def analyze(ticker: str) -> None:
 
 async def _analyze(ticker: str) -> None:
 
-    provider = AlphaVantageProvider()
+    alpha_provider = AlphaVantageProvider()
+    ibkr_provider = IBKRProvider()
 
     try:
-        company = await provider.get_company(ticker)
+        console.rule("[bold blue]Aegis[/]")
+
+        console.print("[bold]Connecting to IBKR...[/]")
+
+        await ibkr_provider.connect()
+
+        console.print("[green]✓ Connected to IBKR[/]")
+
+        company = await alpha_provider.get_company(ticker)
 
         option = OptionContract(
             underlying=company.symbol,
@@ -49,9 +59,8 @@ async def _analyze(ticker: str) -> None:
             option=option,
         )
 
-        console.rule("[bold blue]Aegis[/]")
-
-        console.print(f"[bold]Company[/]")
+        console.print()
+        console.print("[bold]Company[/]")
         console.print(f"Name       : {company.name}")
         console.print(f"Ticker     : {company.symbol}")
         console.print(f"Exchange   : {company.exchange}")
@@ -60,7 +69,6 @@ async def _analyze(ticker: str) -> None:
         console.print(f"Market Cap : {company.market_cap:,}")
 
         console.print()
-
         console.print("[bold]Hard Filters[/]")
 
         for result in results:
@@ -71,4 +79,5 @@ async def _analyze(ticker: str) -> None:
         console.print("[bold green]Analysis completed[/]")
 
     finally:
-        await provider.close()
+        await alpha_provider.close()
+        await ibkr_provider.disconnect()
