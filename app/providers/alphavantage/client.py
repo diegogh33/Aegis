@@ -4,7 +4,7 @@ from typing import Any
 
 import httpx
 
-from config.settings import settings
+from app.config.settings import settings
 from app.providers.alphavantage.endpoints import OVERVIEW
 
 
@@ -19,10 +19,17 @@ class AlphaVantageClient:
     BASE_URL = "https://www.alphavantage.co/query"
 
     def __init__(self) -> None:
-        self._client = httpx.AsyncClient(timeout=30)
 
-    async def _request(self, **params: Any) -> dict[str, Any]:
-        params["apikey"] = settings.alphavantage_api_key
+        self._client = httpx.AsyncClient(
+            timeout=30,
+        )
+
+    async def _request(
+        self,
+        **params: Any,
+    ) -> dict[str, Any]:
+
+        params["apikey"] = settings.alpha_vantage_api_key
 
         response = await self._client.get(
             self.BASE_URL,
@@ -45,10 +52,12 @@ class AlphaVantageClient:
         self,
         symbol: str,
     ) -> dict[str, Any]:
+
         return await self._request(
             function=OVERVIEW,
             symbol=symbol,
         )
 
     async def close(self) -> None:
+
         await self._client.aclose()

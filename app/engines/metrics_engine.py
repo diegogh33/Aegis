@@ -26,9 +26,18 @@ class MetricsEngine:
         if today is None:
             today = date.today()
 
-        dte = (option.expiration - today).days
+        dte = max(
+            1,
+            (option.expiration - today).days,
+        )
 
-        premium = option.mark * Decimal("100")
+        #
+        # Premium
+        #
+
+        mark = option.mark or Decimal("0")
+
+        premium = mark * Decimal("100")
 
         premium_percentage = (
             premium / (option.strike * Decimal("100"))
@@ -40,25 +49,55 @@ class MetricsEngine:
             / Decimal(dte)
         )
 
-        break_even = option.strike - option.mark
+        #
+        # Break-even
+        #
 
-        distance_to_strike_pct = (
-            (underlying_price - option.strike)
-            / underlying_price
-        )
+        break_even = option.strike - mark
 
-        margin_of_safety_pct = (
-            (underlying_price - break_even)
-            / underlying_price
-        )
+        #
+        # Distance to strike
+        #
 
-        bid_ask_spread = option.ask - option.bid
+        if underlying_price > 0:
 
-        bid_ask_spread_pct = (
-            bid_ask_spread / option.ask
-            if option.ask > 0
-            else Decimal("0")
-        )
+            distance_to_strike_pct = (
+                (underlying_price - option.strike)
+                / underlying_price
+            )
+
+            margin_of_safety_pct = (
+                (underlying_price - break_even)
+                / underlying_price
+            )
+
+        else:
+
+            distance_to_strike_pct = Decimal("0")
+            margin_of_safety_pct = Decimal("0")
+
+        #
+        # Spread
+        #
+
+        bid = option.bid or Decimal("0")
+        ask = option.ask or Decimal("0")
+
+        bid_ask_spread = ask - bid
+
+        if ask > 0:
+
+            bid_ask_spread_pct = (
+                bid_ask_spread / ask
+            )
+
+        else:
+
+            bid_ask_spread_pct = Decimal("0")
+
+        #
+        # Liquidity
+        #
 
         liquidity_score = Decimal("0")
 

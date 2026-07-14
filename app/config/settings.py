@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 import yaml
 from dotenv import load_dotenv
@@ -20,9 +21,9 @@ class Settings:
         constitution_path: str = "config/constitution.yaml",
     ) -> None:
 
-        # ------------------------------------------------------------------
+        #
         # Constitution
-        # ------------------------------------------------------------------
+        #
 
         self.constitution_path = Path(constitution_path)
 
@@ -33,18 +34,18 @@ class Settings:
 
             self.constitution = yaml.safe_load(file)
 
-        # ------------------------------------------------------------------
+        #
         # Alpha Vantage
-        # ------------------------------------------------------------------
+        #
 
         self.alpha_vantage_api_key = os.getenv(
             "ALPHA_VANTAGE_API_KEY",
             "",
         )
 
-        # ------------------------------------------------------------------
+        #
         # Interactive Brokers
-        # ------------------------------------------------------------------
+        #
 
         self.ibkr_host = os.getenv(
             "IBKR_HOST",
@@ -64,6 +65,30 @@ class Settings:
                 "1",
             )
         )
+
+    def get(
+        self,
+        *keys: str,
+    ) -> Any:
+        """
+        Returns a value from constitution.yaml.
+
+        Example:
+            settings.get("cash_secured_put", "scoring", "delta", "weight")
+        """
+
+        value: Any = self.constitution
+        
+        for key in keys:
+
+            if not isinstance(value, dict):
+                raise KeyError(
+                    f"Invalid configuration path: {' -> '.join(keys)}"
+                )
+
+            value = value[key]
+
+        return value
 
 
 settings = Settings()

@@ -8,6 +8,11 @@ from app.models.option_contract import OptionContract
 class LiquidityFilter:
     """
     Removes illiquid option contracts.
+
+    During development, if market data is unavailable
+    (for example because the IBKR account has no market
+    data subscription), the contract is kept instead of
+    being discarded.
     """
 
     def __init__(
@@ -30,17 +35,36 @@ class LiquidityFilter:
 
         for contract in contracts:
 
+            #
+            # No market data available.
+            #
+            # Keep the contract during development.
+            #
+
             if contract.bid is None or contract.ask is None:
+                filtered.append(contract)
                 continue
+
+            #
+            # Minimum premium
+            #
 
             if contract.bid < self.minimum_bid:
                 continue
 
-            if contract.volume is None:
+            #
+            # Volume
+            #
+
+            if (
+                contract.volume is not None
+                and contract.volume < self.minimum_volume
+            ):
                 continue
 
-            if contract.volume < self.minimum_volume:
-                continue
+            #
+            # Bid / Ask spread
+            #
 
             spread = contract.ask - contract.bid
 

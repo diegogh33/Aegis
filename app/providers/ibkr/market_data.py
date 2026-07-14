@@ -57,6 +57,30 @@ class MarketDataProvider:
         if market_price not in (None, -1):
             underlying = Decimal(str(market_price))
 
+        #
+        # DEBUG
+        #
+
+        print()
+        print("=" * 80)
+        print(f"Contract      : {contract.localSymbol}")
+        print(f"Underlying    : {underlying}")
+        print(f"Bid           : {bid}")
+        print(f"Ask           : {ask}")
+        print(f"Last          : {last}")
+        print(f"Market Price  : {market_price}")
+        print(f"Model Greeks  : {greeks}")
+
+        if greeks:
+            print(f"Delta         : {greeks.delta}")
+            print(f"Gamma         : {greeks.gamma}")
+            print(f"Theta         : {greeks.theta}")
+            print(f"Vega          : {greeks.vega}")
+            print(f"IV            : {greeks.impliedVol}")
+
+        print("=" * 80)
+        print()
+
         self.ib.cancelMktData(contract)
 
         return MarketData(

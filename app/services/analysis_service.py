@@ -22,7 +22,6 @@ class AnalysisService:
 
         self.scanner = OptionScanner(ibkr_provider)
 
-        self.metrics = MetricsEngine()
         self.scorer = OptionScoreEngine()
 
     async def analyze(
@@ -38,7 +37,13 @@ class AnalysisService:
 
         for contract in contracts:
 
-            metrics = self.metrics.evaluate(contract)
+            if contract.underlying_price is None:
+                continue
+
+            metrics = MetricsEngine.calculate(
+                option=contract,
+                underlying_price=contract.underlying_price,
+            )
 
             score = self.scorer.evaluate(
                 option=contract,

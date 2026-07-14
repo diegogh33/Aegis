@@ -31,13 +31,21 @@ class IBKRProvider:
         self._contracts: dict[int, Contract] = {}
 
     async def connect(self) -> None:
+
         await self.ib.connectAsync(
             host=self._host,
             port=self._port,
             clientId=self._client_id,
         )
 
+        #
+        # Utilizar datos retrasados cuando la API no tenga permisos
+        # de tiempo real.
+        #
+        self.ib.reqMarketDataType(3)
+
     async def disconnect(self) -> None:
+
         if self.ib.isConnected():
             self.ib.disconnect()
 
@@ -83,7 +91,6 @@ class IBKRProvider:
 
         contracts: list[OptionContract] = []
 
-        # Solo los dos primeros vencimientos mientras desarrollamos.
         for expiration in chain["expirations"][:2]:
 
             option = Option(

@@ -3,7 +3,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from app.config.settings import Settings
-from app.models.option_contract import OptionContract
+from app.models.option_metrics import OptionMetrics
 from app.models.score_result import ScoreResult
 
 
@@ -18,67 +18,121 @@ class OptionScoreEngine:
             "scoring",
         )
 
+        #
+        # Delta
+        #
+
         self.delta_target = Decimal(
             str(scoring["delta"]["target"])
         )
 
         self.delta_weight = scoring["delta"]["weight"]
+
+        #
+        # Spread
+        #
+
         self.spread_weight = scoring["spread"]["weight"]
+
+        #
+        # Volume
+        #
+
         self.volume_weight = scoring["volume"]["weight"]
-        self.volume_norm = scoring["volume"]["normalization"]
-        self.premium_weight = scoring["premium"]["weight"]
+
+        self.volume_norm = Decimal(
+            str(scoring["volume"]["normalization"])
+        )
+
+        #
+        # Annualized Return
+        #
+
+        self.annualized_weight = scoring[
+            "annualized_return"
+        ]["weight"]
+
+        self.target_return = Decimal(
+            str(
+                scoring["annualized_return"]["target"]
+            )
+        )
 
     def evaluate(
         self,
-        option: OptionContract,
+        metrics: OptionMetrics,
     ) -> ScoreResult:
 
         delta_score = 0.0
         spread_score = 0.0
         volume_score = 0.0
-        premium_score = 0.0
+        annualized_score = 0.0
 
-        if option.delta is not None:
+        #
+        # Delta
+        #
+
+        if metrics.delta is not None:
 
             distance = abs(
-                abs(option.delta) - self.delta_target
+                abs(metrics.delta) - self.delta_target
             )
 
             delta_score = max(
-                0,
-                self.delta_weight - float(distance * Decimal("200")),
+                0.0,
+                self.delta_weight
+                - float(distance * Decimal("200")),
             )
 
-        if (
-            option.bid is not None
-            and option.ask is not None
-            and option.ask > 0
-        ):
+        #
+        # Spread
+        #
 
-            spread = (option.ask - option.bid) / option.ask
+        spread_score = max(
+            0.0,
+            self.spread_weight
+            - float(
+                metrics.bid_ask_spread_pct
+                * Decimal("100")
+            ),
+        )
 
-            spread_score = max(
-                0,
-                self.spread_weight - float(spread * Decimal("100")),
-            )
+        #
+        # Volume
+        #
 
-        if option.volume is not None:
+        if metrics.volume is not None:
 
             volume_score = min(
                 self.volume_weight,
-                option.volume / self.volume_norm,
+                float(
+                    Decimal(metrics.volume)
+                    / self.volume_norm
+                ),
             )
 
-        if option.bid is not None:
+        #
+        # Annualized Return
+        #
 
-            premium_score = min(
-                self.premium_weight,
-                float(option.bid),
+        if metrics.annualized_return is not None:
+
+            annualized_score = min(
+                self.annualized_weight,
+                float(
+                    metrics.annualized_return
+                    / self.target_return
+                    * Decimal(self.annualized_weight)
+                ),
             )
 
         return ScoreResult(
             delta=round(delta_score, 2),
             spread=round(spread_score, 2),
             volume=round(volume_score, 2),
-            premium=round(premium_score, 2),
+            premium=0.0,
+            annualized_return=round(
+                annualized_score,
+                2,
+            ),
         )
