@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.engines.metrics_engine import MetricsEngine
 from app.engines.option_score_engine import OptionScoreEngine
 from app.models.analysis_result import AnalysisResult
 from app.models.scored_option import ScoredOption
@@ -20,6 +21,8 @@ class AnalysisService:
         self.ibkr = ibkr_provider
 
         self.scanner = OptionScanner(ibkr_provider)
+
+        self.metrics = MetricsEngine()
         self.scorer = OptionScoreEngine()
 
     async def analyze(
@@ -31,14 +34,26 @@ class AnalysisService:
 
         contracts = await self.scanner.scan_puts(ticker)
 
-        ranked = sorted(
-            [
+        ranked: list[ScoredOption] = []
+
+        for contract in contracts:
+
+            metrics = self.metrics.evaluate(contract)
+
+            score = self.scorer.evaluate(
+                option=contract,
+                metrics=metrics,
+            )
+
+            ranked.append(
                 ScoredOption(
                     option=contract,
-                    score=self.scorer.evaluate(contract),
+                    metrics=metrics,
+                    score=score,
                 )
-                for contract in contracts
-            ],
+            )
+
+        ranked.sort(
             key=lambda item: item.score.total,
             reverse=True,
         )
