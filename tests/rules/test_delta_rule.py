@@ -9,24 +9,75 @@ from app.models.option_contract import OptionContract
 from app.rules.delta import DeltaRule
 
 
-def build_candidate(delta: float) -> InvestmentCandidate:
-    company = Company(
-        ticker="SAP",
-        current_price=Decimal("280"),
-        next_earnings=date.today() + timedelta(days=30),
+def build_company(next_earnings: date | None) -> Company:
+    return Company(
+        symbol="SAP",
+        name="SAP SE",
+        currency="USD",
+        exchange="NYSE",
+        sector="Technology",
+        industry="Software",
+        country="Germany",
+        description="Enterprise software company.",
+        market_cap=200_000_000_000,
+        pe_ratio=None,
+        peg_ratio=None,
+        eps=None,
+        book_value_per_share=None,
+        dividend_per_share=None,
+        dividend_yield=None,
+        beta=None,
+        shares_outstanding=None,
+        revenue_ttm=None,
+        gross_profit_ttm=None,
+        operating_margin=None,
+        profit_margin=None,
+        ebitda=None,
+        roe=None,
+        roa=None,
+        total_assets=None,
+        total_liabilities=None,
+        debt_to_equity=None,
+        operating_cash_flow=None,
+        free_cash_flow=None,
+        quarterly_revenue_growth=None,
+        quarterly_earnings_growth=None,
+        next_earnings=next_earnings,
     )
+
+
+def build_option(delta: float) -> OptionContract:
+    return OptionContract(
+        underlying="SAP",
+        local_symbol="SAP",
+        con_id=1,
+        option_type="PUT",
+        expiration=date.today() + timedelta(days=45),
+        strike=Decimal("250"),
+        exchange="SMART",
+        currency="USD",
+        multiplier=100,
+        underlying_price=Decimal("280"),
+        bid=Decimal("4.0"),
+        ask=Decimal("4.2"),
+        last=Decimal("4.1"),
+        mark=Decimal("4.1"),
+        delta=delta,
+        gamma=None,
+        theta=None,
+        vega=None,
+        implied_volatility=None,
+        volume=None,
+        open_interest=None,
+    )
+
+
+def build_candidate(delta: float) -> InvestmentCandidate:
+    company = build_company(next_earnings=date.today() + timedelta(days=30))
 
     thesis = InvestmentThesis()
 
-    option = OptionContract(
-        ticker="SAP",
-        expiration=date.today() + timedelta(days=45),
-        strike=Decimal("250"),
-        option_type="PUT",
-        bid=Decimal("4.0"),
-        ask=Decimal("4.2"),
-        delta=delta,
-    )
+    option = build_option(delta=delta)
 
     return InvestmentCandidate(
         company=company,

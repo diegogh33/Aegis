@@ -71,19 +71,171 @@ umbrales, objetivos, etc.).
 
 ------------------------------------------------------------------------
 
+# Cómo se aplican las reglas de inversión (Constitution)
+
+Aegis separa completamente dos conceptos:
+
+1.  **Reglas de inversión (Investment Constitution)** → eliminan
+    opciones.
+2.  **Scoring** → ordena únicamente las opciones que sobreviven.
+
+La filosofía del proyecto es que **ninguna operación puede ser
+recomendada si antes no cumple la Constitución**.
+
+> **Primero filtrar. Después puntuar. Nunca al revés.**
+
+## Fase 1 — Constitution (filtro duro)
+
+Las reglas definidas en `config/constitution.yaml` son obligatorias.
+
+  Regla                             Acción
+  --------------------------------- -----------
+  Empresa no aprobada               DESCARTAR
+  Earnings antes del vencimiento    DESCARTAR
+  Delta fuera del rango permitido   DESCARTAR
+  DTE fuera del rango               DESCARTAR
+  IV Rank inferior al mínimo        DESCARTAR
+  Liquidez insuficiente             DESCARTAR
+  Spread demasiado alto             DESCARTAR
+
+Ejemplo para la estrategia Cash Secured Put:
+
+``` yaml
+delta:
+  min: 0.15
+  max: 0.25
+
+dte:
+  min: 30
+  max: 45
+
+ivr:
+  min: 30
+
+earnings:
+  allow: false
+```
+
+Si cualquiera de estas reglas falla, la opción queda descartada.
+
+## Fase 2 — Score
+
+Una vez filtradas las opciones válidas, Aegis calcula un `ScoreResult`.
+
+El score **no decide si una operación es válida**. Únicamente responde:
+
+> "De todas las operaciones válidas, ¿cuál es la mejor?"
+
+Actualmente el score utiliza:
+
+-   Delta
+-   Spread Bid/Ask
+-   Volumen
+-   Rentabilidad anualizada
+
+Configuración típica:
+
+``` yaml
+scoring:
+  delta:
+    weight: 35
+
+  spread:
+    weight: 20
+
+  volume:
+    weight: 15
+
+  annualized_return:
+    weight: 30
+```
+
+## Ejemplo
+
+  Contrato     Delta   DTE   IVR Earnings   Resultado
+  ---------- ------- ----- ----- ---------- ------------------------
+  A             0.19    38    42 No         ✅ Pasa al Score
+  B             0.33    38    45 No         ❌ Eliminada (Delta)
+  C             0.18    41    18 No         ❌ Eliminada (IV Rank)
+
+Solo la opción **A** llega al `OptionScoreEngine`.
+
+## Flujo objetivo (con Constitution integrada)
+
+``` text
+IBKR
+ │
+ ▼
+OptionScanner
+ │
+ ▼
+Market Data
+ │
+ ▼
+MetricsEngine
+ │
+ ▼
+ConstitutionEngine
+ │
+ ├── descarta opciones que incumplen reglas
+ ▼
+OptionScoreEngine
+ │
+ ▼
+Ranking final
+ │
+ ▼
+CLI / Dashboard
+```
+
+> ⚠️ El `ConstitutionEngine` que aplica estas reglas de forma unificada
+> **todavía no está implementado**. Ver sección "Estado actual" para el
+> detalle de qué existe hoy y qué queda pendiente.
+
+------------------------------------------------------------------------
+
 # Estado actual
 
-La arquitectura ya está dividida entre:
+## Lo que funciona hoy
 
--   CLI
--   Configuración
--   Modelos
--   Engines
--   Providers
--   Services
+-   Estructura de paquetes Python correcta (todos los subpaquetes de
+    `app/` tienen su `__init__.py`).
+-   Suite de tests ejecutable: `uv run pytest` pasa en limpio.
+-   Linting limpio: `uv run ruff check .` sin avisos.
+-   Flujo de scoring (sin Constitution todavía) operativo de extremo a
+    extremo:
+    `AlphaVantageProvider` + `IBKRProvider` → `OptionScanner` →
+    `MetricsEngine` → `OptionScoreEngine` → CLI.
+-   `config/constitution.yaml` ya contiene toda la configuración de
+    reglas (delta, earnings, liquidez, spread, premium, pesos de
+    scoring) — la configuración va por delante del código que la
+    consume.
 
-El proyecto utiliza `dataclasses`, tipado moderno y separación de
-responsabilidades.
+## Lo que NO funciona todavía / limitaciones conocidas
+
+-   **No existe un `ConstitutionEngine` unificado.** Hoy el
+    `AnalysisService` no aplica ningún filtro duro antes de puntuar:
+    todo lo que llega de IBKR con datos de mercado pasa directamente
+    al `OptionScoreEngine`.
+-   **Hay dos sistemas de reglas incompatibles conviviendo en el
+    código** (`app/rules/base.py` + `app/core/result.py` por un lado,
+    `app/rules/base_rule.py` + `app/models/rule_result.py` por otro),
+    con firmas de `evaluate()` distintas. Antes de construir el
+    `ConstitutionEngine` real hay que unificarlos. Esto está
+    planificado como próximo commit, no incluido en este.
+-   **`mypy app` reporta ~31 errores** repartidos entre
+    `option_score_engine.py`, `option_selector.py`,
+    `providers/ibkr/provider.py` y otros. No bloquean la ejecución del
+    flujo actual pero indican inconsistencias de tipos reales
+    (atributos que no existen, `Decimal | None` operado como si nunca
+    fuera `None`, etc.). Pendientes de una limpieza dedicada.
+-   **IBKR con datos delayed** (`reqMarketDataType(3)` en el histórico
+    de pruebas manuales) — los Greeks e IV pueden no ser en tiempo
+    real según el tipo de suscripción de market data usada.
+-   Pendiente de implementar: `ConstitutionEngine`,
+    `CompanyRulesEngine` (unificado), `EarningsFilter`,
+    `IVRankFilter`, `DeltaFilter`/`DTEFilter` como filtros duros
+    conectados al flujo, `PositionSizing`, `PortfolioRules`.
 
 ------------------------------------------------------------------------
 
@@ -91,14 +243,21 @@ responsabilidades.
 
 ``` text
 app/
-
+    builders/
     cli/
+        commands/
+            analyze.py
     config/
-
+    core/
+        result.py
+        rule_status.py
+        rule_engine.py
+        evaluation_report.py
+    criteria/
     engines/
         metrics_engine.py
         option_score_engine.py
-
+    mcp/
     models/
         company.py
         option_contract.py
@@ -106,20 +265,33 @@ app/
         scored_option.py
         score_result.py
         analysis_result.py
-
+        investment_candidate.py
+        investment_thesis.py
     providers/
         alphavantage/
         ibkr/
-
+    rules/
+        base.py
+        delta.py
+        no_earnings.py
+        company/
+            company_approved_rule.py
+    selectors/
     services/
         option_scanner.py
         liquidity_filter.py
         analysis_service.py
+    strategies/
+    utils/
+
+tests/
+    rules/
+        test_delta_rule.py
 ```
 
 ------------------------------------------------------------------------
 
-# Flujo actual
+# Flujo actual (sin Constitution todavía)
 
 ``` text
 Usuario
@@ -195,7 +367,10 @@ Pendiente:
 
 ## Company
 
-Información fundamental de la empresa.
+Información fundamental de la empresa. Incluye `next_earnings`
+(fecha del próximo earnings, usada por la regla de exclusión
+pre-earnings de la Constitution). Puede ser `None` si el proveedor no
+lo suministra todavía.
 
 ## OptionContract
 
@@ -234,7 +409,8 @@ Calcula puntuaciones.
 
 ## OptionScanner
 
-Obtiene opciones, las enriquece con datos de mercado y aplica filtros.
+Obtiene opciones, las enriquece con datos de mercado y aplica filtros
+de liquidez.
 
 ## AnalysisService
 
@@ -268,17 +444,95 @@ Overall Score: 96
 ★★★★★
 ```
 
+Nota: el CLI actual (`app/cli/commands/analyze.py`) ya produce una
+tabla de empresa y una tabla de mejores PUT candidatas con score, pero
+todavía sin el filtro de Constitution aplicado ni el "Fundamental
+Score" como campo independiente.
+
+------------------------------------------------------------------------
+
+# Cómo probar el proyecto
+
+## Requisitos
+
+-   Python ≥ 3.13
+-   [`uv`](https://docs.astral.sh/uv/) instalado
+-   (Opcional, solo para el flujo end-to-end real) TWS o IB Gateway
+    corriendo en local, y una API key de Alpha Vantage
+
+## Instalación
+
+``` bash
+uv sync
+```
+
+Esto instala dependencias de producción y de desarrollo
+(`pytest`, `ruff`, `mypy`, `pre-commit`).
+
+## Ejecutar la suite de tests
+
+``` bash
+uv run pytest
+```
+
+Debe terminar en verde. Si algún test falla, **no se considera
+terminado ningún cambio** hasta que vuelva a pasar (ver "Reglas de
+desarrollo" más abajo).
+
+Para ver detalle de cada test:
+
+``` bash
+uv run pytest -v
+```
+
+## Linting
+
+``` bash
+uv run ruff check .
+```
+
+Debe devolver `All checks passed!`. Aegis no aplica todavía
+`ruff format` en CI/commits — el formato existente no es 100%
+consistente y se abordará en un commit dedicado más adelante.
+
+## Comprobación de tipos (informativa, no bloqueante todavía)
+
+``` bash
+uv run mypy app
+```
+
+A día de hoy reporta errores conocidos y documentados en "Estado
+actual". No es un gate de commit por ahora, pero es una buena señal de
+qué áreas del código necesitan más atención.
+
+## Ejecutar el CLI contra datos reales
+
+Requiere IBKR (TWS/Gateway) corriendo en `127.0.0.1:7496` y una API key
+de Alpha Vantage configurada como variable de entorno.
+
+``` bash
+uv run python -m app.main AAPL
+```
+
+Esto **no se puede validar en un entorno aislado sin conexión a IBKR**;
+es la parte que cada colaborador debe probar en su propia máquina antes
+de dar un cambio por terminado.
+
 ------------------------------------------------------------------------
 
 # Roadmap
 
-## Fase 1 (Prioridad absoluta)
+## Fase 1 (Prioridad absoluta) — en curso
 
--   Finalizar la refactorización del dominio.
--   Unificar `OptionMetrics`, `MetricsEngine`, `OptionScoreEngine` y
-    `AnalysisService`.
--   Estabilizar IBKR.
--   Conseguir que todos los tests pasen.
+-   [x] Estructura de paquetes correcta (`__init__.py` en todos los
+        subpaquetes).
+-   [x] Suite de tests ejecutable y en verde.
+-   [x] Eliminar scripts de prueba manual mezclados con tests
+        automatizados.
+-   [ ] Unificar los dos sistemas de reglas en uno solo.
+-   [ ] Construir `ConstitutionEngine` real conectado al flujo.
+-   [ ] Resolver los errores de `mypy`.
+-   [ ] Estabilizar IBKR (incluyendo el tema de datos delayed).
 
 ## Fase 2
 
@@ -302,28 +556,25 @@ Overall Score: 96
 
 ------------------------------------------------------------------------
 
-# Problemas detectados
-
-1.  Refactorización incompleta del dominio.
-2.  Integración con IBKR y datos delayed (`reqMarketDataType(3)`).
-3.  Ausencia de una batería de tests.
-
-------------------------------------------------------------------------
-
 # Reglas de desarrollo
 
 1.  Nunca romper la compilación.
-2.  Todo cambio debe dejar el proyecto funcionando.
+2.  Todo cambio debe dejar el proyecto funcionando (`uv run pytest`
+    en verde).
 3.  Todo cambio debe incluir tests.
 4.  Separar cálculos de reglas de negocio.
 5.  Un modelo = una responsabilidad.
 6.  Toda funcionalidad nueva debe incluir pruebas automáticas.
+7.  Cada vez que se añada, modifique o elimine una funcionalidad
+    importante, este README debe actualizarse en el mismo cambio.
+8.  Ante cualquier duda de diseño, se pregunta antes de decidir.
 
 Antes de considerar un cambio terminado:
 
 ``` bash
 uv run pytest
-uv run python -m app.main AAPL
+uv run ruff check .
+uv run python -m app.main AAPL   # validación manual en local, con IBKR corriendo
 ```
 
 ------------------------------------------------------------------------

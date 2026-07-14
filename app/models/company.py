@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
 
 
@@ -89,3 +90,9 @@ class Company:
     quarterly_revenue_growth: Decimal | None
 
     quarterly_earnings_growth: Decimal | None
+
+    # ------------------------------------------------------------------
+    # Calendar
+    # ------------------------------------------------------------------
+
+    next_earnings: date | None = None
