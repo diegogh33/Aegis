@@ -32,7 +32,10 @@ class IBKRMapper:
             currency=contract.currency,
             multiplier=int(contract.multiplier),
 
-            # Market data (todavía no la hemos pedido)
+            # Underlying
+            underlying_price=None,
+
+            # Prices
             bid=None,
             ask=None,
             last=None,

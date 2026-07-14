@@ -46,15 +46,24 @@ class OptionScanner:
             enriched.append(
                 replace(
                     contract,
+
+                    # Underlying
+                    underlying_price=market.underlying_price,
+
+                    # Prices
                     bid=market.bid,
                     ask=market.ask,
                     last=market.last,
                     mark=market.mark,
+
+                    # Greeks
                     delta=market.delta,
                     gamma=market.gamma,
                     theta=market.theta,
                     vega=market.vega,
                     implied_volatility=market.implied_volatility,
+
+                    # Liquidity
                     volume=market.volume,
                     open_interest=market.open_interest,
                 )
