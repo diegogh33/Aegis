@@ -44,6 +44,58 @@ def _has_any_price(ticker: Ticker) -> bool:
     )
 
 
+def _to_market_data(
+    ticker: Ticker,
+    greeks,
+) -> MarketData:
+    """
+    Maps an IBKR Ticker (plus a possibly-later-arrived greeks object)
+    into a MarketData. Pure and side-effect free, so it's testable
+    without an IB connection.
+    """
+
+    bid = _decimal_or_none(ticker.bid)
+    ask = _decimal_or_none(ticker.ask)
+    last = _decimal_or_none(ticker.last)
+
+    mark = None
+
+    if bid is not None and ask is not None:
+        mark = (bid + ask) / Decimal("2")
+
+    underlying = _decimal_or_none(ticker.marketPrice())
+
+    return MarketData(
+        underlying_price=underlying,
+
+        bid=bid,
+        ask=ask,
+        last=last,
+        mark=mark,
+
+        delta=_decimal_or_none(greeks.delta) if greeks else None,
+        gamma=_decimal_or_none(greeks.gamma) if greeks else None,
+        theta=_decimal_or_none(greeks.theta) if greeks else None,
+        vega=_decimal_or_none(greeks.vega) if greeks else None,
+
+        implied_volatility=(
+            _decimal_or_none(greeks.impliedVol) if greeks else None
+        ),
+
+        volume=(
+            None
+            if ticker.volume is None or math.isnan(ticker.volume)
+            else ticker.volume
+        ),
+        open_interest=(
+            None
+            if ticker.openInterest is None
+            or math.isnan(ticker.openInterest)
+            else int(ticker.openInterest)
+        ),
+    )
+
+
 class MarketDataProvider:
     """
     Retrieves market data from Interactive Brokers.
@@ -131,18 +183,7 @@ class MarketDataProvider:
                 if greeks is not None:
                     break
 
-        bid = _decimal_or_none(ticker.bid)
-        ask = _decimal_or_none(ticker.ask)
-        last = _decimal_or_none(ticker.last)
-
-        mark = None
-
-        if bid is not None and ask is not None:
-            mark = (bid + ask) / Decimal("2")
-
-        underlying = _decimal_or_none(ticker.marketPrice())
-
-        if bid is None and ask is None and last is None:
+        if not _has_any_price(ticker):
             logger.debug(
                 "No market data for {symbol} (marketDataType={type}), "
                 "even after retrying with delayed data. This is "
@@ -160,30 +201,7 @@ class MarketDataProvider:
 
         self.ib.cancelMktData(contract)
 
-        return MarketData(
-            underlying_price=underlying,
-
-            bid=bid,
-            ask=ask,
-            last=last,
-            mark=mark,
-
-            delta=_decimal_or_none(greeks.delta) if greeks else None,
-            gamma=_decimal_or_none(greeks.gamma) if greeks else None,
-            theta=_decimal_or_none(greeks.theta) if greeks else None,
-            vega=_decimal_or_none(greeks.vega) if greeks else None,
-
-            implied_volatility=(
-                _decimal_or_none(greeks.impliedVol) if greeks else None
-            ),
-
-            volume=(
-                None
-                if ticker.volume is None or math.isnan(ticker.volume)
-                else ticker.volume
-            ),
-            open_interest=None,
-        )
+        return _to_market_data(ticker, greeks)
 
     async def get_stock_price(self, contract) -> Decimal | None:
         """

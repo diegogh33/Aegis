@@ -219,9 +219,21 @@ CLI / Dashboard
     donde todo eso convergió en un resultado real y útil.
 -   Estructura de paquetes Python correcta (todos los subpaquetes de
     `app/` tienen su `__init__.py`).
--   Suite de tests ejecutable: `uv run pytest` pasa en limpio (69
+-   Suite de tests ejecutable: `uv run pytest` pasa en limpio (72
     tests).
 -   Linting limpio: `uv run ruff check .` sin avisos.
+-   **`open_interest` de opciones ya se puebla desde IBKR.** Estaba
+    hardcodeado a `None` en `MarketDataProvider.get()` desde que se
+    escribió — nunca se leía `ticker.openInterest`, pese a que el
+    modelo lo soporta y `LiquidityRule` ya lo comprueba desde su
+    creación. En la práctica, la mitad de `LiquidityRule` (el chequeo
+    de open interest) nunca podía activarse; solo el de volumen
+    funcionaba de verdad. Se popula igual que los Greeks, sin
+    `genericTickList` especial, como parte de los ticks estándar de
+    "option computation". De paso, el mapeo de `Ticker` a
+    `MarketData` se extrajo a una función pura (`_to_market_data`),
+    testeable sin conexión a IBKR — antes solo era testeable
+    end-to-end contra una conexión real.
 -   `config/constitution.yaml` ya contiene toda la configuración de
     reglas (delta, earnings, liquidez, spread, premium, pesos de
     scoring) — la configuración va por delante del código que la

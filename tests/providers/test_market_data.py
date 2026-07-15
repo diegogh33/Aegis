@@ -3,7 +3,11 @@ from decimal import Decimal
 
 from ib_async import Ticker
 
-from app.providers.ibkr.market_data import _decimal_or_none, _has_any_price
+from app.providers.ibkr.market_data import (
+    _decimal_or_none,
+    _has_any_price,
+    _to_market_data,
+)
 
 
 def test_none_returns_none():
@@ -63,3 +67,42 @@ def test_ticker_with_bid_ask_has_a_price():
     ticker.last = 4.1
 
     assert _has_any_price(ticker)
+
+
+def test_maps_open_interest_from_ticker():
+    """
+    Regression test: open_interest was hardcoded to None in the
+    MarketData built by get(), even though the model and
+    LiquidityRule both support checking it - meaning half of
+    LiquidityRule (the open interest check) could never actually
+    trigger. ticker.openInterest is populated as part of the standard
+    option computation ticks, same as the Greeks, with no special
+    genericTickList needed.
+    """
+    ticker = Ticker()
+    ticker.openInterest = 750.0
+
+    market_data = _to_market_data(ticker, greeks=None)
+
+    assert market_data.open_interest == 750
+
+
+def test_open_interest_nan_maps_to_none():
+    ticker = Ticker()
+    # openInterest defaults to NaN on a fresh Ticker.
+
+    market_data = _to_market_data(ticker, greeks=None)
+
+    assert market_data.open_interest is None
+
+
+def test_maps_bid_ask_mark_correctly():
+    ticker = Ticker()
+    ticker.bid = 4.0
+    ticker.ask = 4.2
+
+    market_data = _to_market_data(ticker, greeks=None)
+
+    assert market_data.bid == Decimal("4.0")
+    assert market_data.ask == Decimal("4.2")
+    assert market_data.mark == Decimal("4.1")
