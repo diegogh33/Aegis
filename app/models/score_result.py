@@ -9,7 +9,6 @@ class ScoreResult:
     delta: float
     spread: float
     volume: float
-    premium: float
     annualized_return: float
 
     @property
@@ -19,7 +18,6 @@ class ScoreResult:
             self.delta
             + self.spread
             + self.volume
-            + self.premium
             + self.annualized_return,
             2,
         )

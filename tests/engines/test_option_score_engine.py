@@ -55,3 +55,41 @@ def test_missing_delta_and_volume_do_not_raise():
 
     assert score.delta == 0.0
     assert score.volume == 0.0
+
+
+def test_score_has_no_premium_component():
+    """
+    Regression guard: the premium score was removed because it
+    duplicated annualized_return (ROC vs ROC annualized, same
+    underlying signal). ScoreResult should no longer expose it, and
+    its 10-point weight was folded into annualized_return
+    (35 -> 45 in constitution.yaml) rather than left unassigned.
+    """
+    engine = OptionScoreEngine()
+
+    option = build_option(delta=-0.20)
+
+    metrics = MetricsEngine.calculate(
+        option=option,
+        underlying_price=Decimal("280"),
+    )
+
+    score = engine.evaluate(option=option, metrics=metrics)
+
+    assert not hasattr(score, "premium")
+    assert engine.annualized_weight == 45
+
+
+def test_total_score_ceiling_matches_constitution_weights():
+    """
+    delta(30) + spread(15) + volume(10) + annualized_return(45) = 100,
+    the maximum achievable total score.
+    """
+    engine = OptionScoreEngine()
+
+    assert (
+        engine.delta_weight
+        + engine.spread_weight
+        + engine.volume_weight
+        + engine.annualized_weight
+    ) == 100

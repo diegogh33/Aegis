@@ -151,7 +151,7 @@ scoring:
 
   annualized_return:
     target: 15
-    weight: 35
+    weight: 45
 ```
 
 > Nota: este es el `scoring` real tal como vive hoy en
@@ -339,6 +339,21 @@ CLI / Dashboard
     devolvían un `Contract` válido — ahora se valida explícitamente
     en runtime (`_as_single_contract()`), coincidiendo con lo que
     los stubs de `ib_async` ya declaraban como posible.
+-   **Score de "Premium" eliminado — estaba sin implementar
+    (`0.0` fijo) y duplicaba `annualized_return`.** Análisis previo
+    (documento externo, revisado y confirmado) mostró que
+    `Annualized Return = ROC × (365 / DTE)` — ambas métricas miden
+    esencialmente la misma señal de rentabilidad, solo que una está
+    anualizada y la otra no. Mantener las dos como componentes de
+    score independientes habría duplicado el peso de la misma
+    información. `ScoreResult` ya no tiene campo `premium`;
+    `scoring.premium` se eliminó de `constitution.yaml` y sus 10
+    puntos de peso se sumaron a `annualized_return` (35 → 45), para
+    que el techo teórico del score total siga siendo 100
+    (delta 30 + spread 15 + volume 10 + annualized_return 45). Nota:
+    `cash_secured_put.premium.minimum_annualized_return` sigue
+    existiendo en el YAML — es un umbral de filtro distinto, no
+    relacionado con este score, y no se ha tocado.
 
 ## Lo que NO funciona todavía / limitaciones conocidas
 

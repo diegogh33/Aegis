@@ -47,9 +47,6 @@ cash_secured_put:
       weight: 10
       normalization: 100
 
-    premium:
-      weight: 10
-
     annualized_return:
-      weight: 35
+      weight: 45
       target: 15

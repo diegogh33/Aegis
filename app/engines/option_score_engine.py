@@ -142,7 +142,6 @@ class OptionScoreEngine:
             delta=round(delta_score, 2),
             spread=round(spread_score, 2),
             volume=round(volume_score, 2),
-            premium=0.0,
             annualized_return=round(
                 annualized_score,
                 2,
