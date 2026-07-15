@@ -207,9 +207,19 @@ CLI / Dashboard
 
 ## Lo que funciona hoy
 
+-   **Primera ejecución 100% completa de extremo a extremo,
+    confirmada con datos reales** (AAPL, mercado US abierto,
+    15-jul-2026): dos candidatos atravesaron todo el pipeline —
+    IBKR real → `MetricsEngine` → 6 reglas de Constitution →
+    `OptionScoreEngine` → ranking final — con Bid/Ask/Delta/IV/Volumen
+    reales, no ausentes. El resto de la sesión había ido resolviendo,
+    uno a uno, los motivos por los que esto no ocurría antes
+    (pipeline roto, NaN, suscripciones de datos, ventanas de
+    vencimiento mal filtradas, timing de Greeks); este es el punto
+    donde todo eso convergió en un resultado real y útil.
 -   Estructura de paquetes Python correcta (todos los subpaquetes de
     `app/` tienen su `__init__.py`).
--   Suite de tests ejecutable: `uv run pytest` pasa en limpio (20
+-   Suite de tests ejecutable: `uv run pytest` pasa en limpio (69
     tests).
 -   Linting limpio: `uv run ruff check .` sin avisos.
 -   `config/constitution.yaml` ya contiene toda la configuración de
@@ -445,25 +455,24 @@ CLI / Dashboard
     contratos US que sí tienen suscripción real) atascada en modo
     delayed — `reqMarketDataType()` es de toda la conexión, no por
     petición individual.
--   **Poll adicional específico para `modelGreeks`, pendiente de
-    confirmar en horario de mercado (añadido, no validado aún).**
-    Probando AAPL en horario US con la suscripción funcionando bien
-    (sin errores 10091/354), 24 de 32 contratos llegaron con precio
-    disponible pero **sin delta** ("Delta unavailable"). Según la
-    documentación de IBKR, los Greeks (delta/gamma/theta/vega) se
-    devuelven automáticamente tras `reqMktData()` para opciones, sin
-    necesitar un `genericTickList` especial — pero el cálculo del
-    modelo tarda más en poblarse que bid/ask/last crudos, y
+-   **Poll adicional específico para `modelGreeks` — confirmado con
+    datos reales, funcionó.** Probando AAPL en horario US con la
+    suscripción funcionando bien (sin errores 10091/354), 24 de 32
+    contratos habían llegado con precio disponible pero **sin
+    delta** ("Delta unavailable"). El cálculo del modelo de Greeks
+    de IBKR tarda más en poblarse que bid/ask/last crudos, y
     `_request_ticker()` devolvía el ticker en cuanto había *precio*,
-    sin esperar a que también llegaran los Greeks. `MarketDataProvider.get()`
-    ahora, si hay precio pero `modelGreeks` sigue `None`, hace un
-    poll corto (hasta 3 segundos extra, en pasos de 0.5s) antes de
-    rendirse — evita alargar la espera para contratos que ya
-    llegan completos, mientras da margen real a los que tardan más.
-    **No se ha podido validar el efecto real de este cambio en esta
-    sesión** (requiere otra ejecución contra IBKR en horario de
-    mercado); si sigue faltando delta en la próxima prueba, el poll
-    no fue la causa real y hará falta seguir investigando.
+    sin esperar a que también llegaran los Greeks.
+    `MarketDataProvider.get()` ahora, si hay precio pero
+    `modelGreeks` sigue `None`, hace un poll corto (hasta 3 segundos
+    extra, en pasos de 0.5s) antes de rendirse. **Confirmado en la
+    siguiente ejecución real**: por primera vez en toda la sesión,
+    dos candidatos completaron todo el pipeline con datos 100%
+    reales (bid/ask/delta/IV/volumen) y llegaron al ranking final —
+    AAPL 310 PUT 21-ago (delta -0.276, score 80.0) y AAPL 315 PUT
+    21-ago (delta -0.343, score 66.4) — y el resto de rechazos
+    pasaron a tener motivos de mercado real (delta fuera de rango,
+    spread ancho, poco volumen) en vez de "sin datos".
 
 ## Lo que NO funciona todavía / limitaciones conocidas
 
