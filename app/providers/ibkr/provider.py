@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from datetime import date, datetime
 from decimal import Decimal
 
 from ib_async import Contract, IB, Option, Stock
 from loguru import logger
 
+from app.config.settings import Settings
 from app.models.market_data import MarketData
 from app.models.option_contract import OptionContract
 from app.providers.ibkr.mapper import IBKRMapper
@@ -36,6 +38,27 @@ def _as_single_contract(
     return None
 
 
+def _within_dte_window(
+    expiration: str,
+    min_dte: int,
+    max_dte: int,
+    today: date | None = None,
+) -> bool:
+    """
+    Checks whether an expiration string (IBKR's "YYYYMMDD" format)
+    falls within [min_dte, max_dte] days from today.
+    """
+
+    if today is None:
+        today = date.today()
+
+    expiration_date = datetime.strptime(expiration, "%Y%m%d").date()
+
+    dte = (expiration_date - today).days
+
+    return min_dte <= dte <= max_dte
+
+
 class IBKRProvider:
     """
     Wrapper around the Interactive Brokers API.
@@ -46,6 +69,7 @@ class IBKRProvider:
         host: str = "127.0.0.1",
         port: int = 7496,
         client_id: int = 1,
+        settings: Settings | None = None,
     ) -> None:
 
         self._host = host
@@ -58,6 +82,8 @@ class IBKRProvider:
 
         self._contracts: dict[int, Contract] = {}
         self._stock_contracts: dict[str, Contract] = {}
+
+        self._settings = settings or Settings()
 
     async def connect(self) -> None:
 
@@ -178,9 +204,34 @@ class IBKRProvider:
             symbol, exchange=exchange, currency=currency
         )
 
+        dte_window = self._settings.get("scan", "dte_window")
+
+        candidate_expirations = [
+            expiration
+            for expiration in chain["expirations"]
+            if _within_dte_window(
+                expiration,
+                min_dte=dte_window["min"],
+                max_dte=dte_window["max"],
+            )
+        ]
+
+        if not candidate_expirations:
+
+            logger.debug(
+                "{symbol}: no expirations within the {min}-{max} DTE "
+                "scan window; falling back to the two nearest "
+                "expirations instead.",
+                symbol=symbol,
+                min=dte_window["min"],
+                max=dte_window["max"],
+            )
+
+            candidate_expirations = chain["expirations"][:2]
+
         contracts: list[OptionContract] = []
 
-        for expiration in chain["expirations"][:2]:
+        for expiration in candidate_expirations:
 
             option = Option(
                 symbol=symbol,

@@ -1,5 +1,18 @@
 version: 1
 
+scan:
+
+  # Ventana de vencimientos a explorar al escanear la cadena de
+  # opciones, ANTES de aplicar la Constitution. Deliberadamente más
+  # ancha que cash_secured_put.dte (30-45): permite ver candidatos
+  # algo más lejanos (hasta max) si la ventana estricta de la
+  # Constitution no trae nada interesante, sin gastar peticiones de
+  # mercado en vencimientos demasiado cortos (poca prima, casi no
+  # merece la pena) por debajo de min.
+  dte_window:
+    min: 20
+    max: 60
+
 cash_secured_put:
 
   delta:

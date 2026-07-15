@@ -373,9 +373,25 @@ CLI / Dashboard
     contrato. Ahora `exchange`/`currency` son parámetros configurables
     de extremo a extremo (`IBKRProvider` → `OptionScanner` →
     `AnalysisService.analyze()` → CLI), con `SMART`/`USD` como
-    defaults para no romper el uso habitual. Pensado para probar
-    acciones españolas con opciones en MEFF (ej. `SAN`, `ITX`, `TEF`
-    con `--currency EUR`) mientras el mercado US está cerrado.
+    defaults para no romper el uso habitual. Probado en real con SAN
+    (Banco Santander) vía `--currency EUR`: IBKR devolvió el exchange
+    de opciones como **EUREX**, no MEFF como se había asumido en la
+    documentación original — corregido aquí.
+-   **Filtro de ventana de vencimientos al escanear la cadena de
+    opciones (`scan.dte_window` en `constitution.yaml`, 20-60 días
+    por defecto), en vez del límite arbitrario `[:2]` anterior.**
+    Confirmado con datos reales: la cadena de SAN en EUREX tiene 19
+    vencimientos disponibles, pero `get_put_contracts()` solo miraba
+    los 2 más próximos cronológicamente (2 y 9 días) — muy por debajo
+    del rango operativo real (`cash_secured_put.dte`, 30-45 días), así
+    que todo se rechazaba siempre por DTE antes de llegar a ver algo
+    útil. `scan.dte_window` es deliberadamente más ancho que
+    `cash_secured_put.dte`: permite ver candidatos algo más lejanos
+    si la ventana estricta de la Constitution no trae nada
+    interesante (más prima a cambio de más plazo), sin gastar
+    peticiones de mercado en vencimientos demasiado cortos. Si ningún
+    vencimiento cae dentro de la ventana, cae de vuelta a los 2 más
+    próximos en vez de devolver una lista vacía.
 
 ## Lo que NO funciona todavía / limitaciones conocidas
 
@@ -479,6 +495,7 @@ tests/
         test_option_score_engine.py
     providers/
         test_market_data.py
+        test_dte_window.py
     rules/
         test_delta_rule.py
         test_company_approved_rule.py
