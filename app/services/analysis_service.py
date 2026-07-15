@@ -33,11 +33,15 @@ class AnalysisService:
     async def analyze(
         self,
         ticker: str,
+        exchange: str = "SMART",
+        currency: str = "USD",
     ) -> AnalysisResult:
 
         company = await self.alpha.get_company(ticker)
 
-        contracts = await self.scanner.scan_puts(ticker)
+        contracts = await self.scanner.scan_puts(
+            ticker, exchange=exchange, currency=currency
+        )
 
         ranked: list[ScoredOption] = []
         rejected: list[RejectedContract] = []

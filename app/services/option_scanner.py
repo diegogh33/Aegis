@@ -29,9 +29,13 @@ class OptionScanner:
     async def scan_puts(
         self,
         symbol: str,
+        exchange: str = "SMART",
+        currency: str = "USD",
     ) -> list[OptionContract]:
 
-        contracts = await self.provider.get_put_contracts(symbol)
+        contracts = await self.provider.get_put_contracts(
+            symbol, exchange=exchange, currency=currency
+        )
 
         # Durante el desarrollo limitamos el número
         contracts = contracts[:10]
@@ -43,7 +47,7 @@ class OptionScanner:
         # pero el precio de la propia acción normalmente sí está
         # disponible.
         fallback_underlying_price = await self.provider.get_underlying_price(
-            symbol
+            symbol, exchange=exchange, currency=currency
         )
 
         tasks = [

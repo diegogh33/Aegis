@@ -23,6 +23,31 @@ def _market_data(underlying_price: Decimal | None) -> MarketData:
     )
 
 
+async def test_propagates_exchange_and_currency_to_provider():
+    """
+    Non-US tickers (e.g. Spanish stocks on MEFF) need exchange/
+    currency passed through to IBKR - defaults are SMART/USD but
+    scan_puts must forward whatever the caller specifies.
+    """
+    option = build_option(delta=None)
+
+    provider = AsyncMock()
+    provider.get_put_contracts.return_value = [option]
+    provider.get_underlying_price.return_value = Decimal("40.00")
+    provider.get_market_data.return_value = _market_data(underlying_price=None)
+
+    scanner = OptionScanner(provider)
+
+    await scanner.scan_puts("SAN", exchange="SMART", currency="EUR")
+
+    provider.get_put_contracts.assert_awaited_once_with(
+        "SAN", exchange="SMART", currency="EUR"
+    )
+    provider.get_underlying_price.assert_awaited_once_with(
+        "SAN", exchange="SMART", currency="EUR"
+    )
+
+
 async def test_falls_back_to_stock_price_when_option_has_no_underlying_price():
     """
     Regression test: on accounts without an IBKR options market data

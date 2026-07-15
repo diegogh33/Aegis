@@ -366,9 +366,26 @@ CLI / Dashboard
     CLI muestra una tabla "Rejected Contracts" agrupada por motivo con
     conteo y un mensaje de ejemplo, y un aviso explícito si la tabla
     de candidatos queda vacía del todo.
+-   **Soporte para tickers no estadounidenses** (`--currency`,
+    `--exchange` en el CLI). Antes, `IBKRProvider` tenía
+    `Stock(symbol, "SMART", "USD")` hardcodeado en dos sitios —
+    cualquier ticker fuera de US habría fallado al cualificar el
+    contrato. Ahora `exchange`/`currency` son parámetros configurables
+    de extremo a extremo (`IBKRProvider` → `OptionScanner` →
+    `AnalysisService.analyze()` → CLI), con `SMART`/`USD` como
+    defaults para no romper el uso habitual. Pensado para probar
+    acciones españolas con opciones en MEFF (ej. `SAN`, `ITX`, `TEF`
+    con `--currency EUR`) mientras el mercado US está cerrado.
 
 ## Lo que NO funciona todavía / limitaciones conocidas
 
+-   **`AlphaVantageProvider` no está adaptado a tickers no
+    estadounidenses.** Usa el símbolo tal cual (ej. `SAN`), pero
+    AlphaVantage suele necesitar un sufijo de mercado para acciones
+    fuera de US (ej. `SAN.MC` para Madrid, sin confirmar el sufijo
+    exacto). Con un ticker europeo, la tabla "Company" puede salir
+    vacía o fallar aunque la tabla de opciones (que solo depende de
+    IBKR) funcione bien — son proveedores independientes.
 -   **No hay fuente de datos real para `InvestmentThesis.approved`.**
     Se decide "a mano" con `approved=True` fijo en
     `AnalysisService.analyze()`. Falta decidir de dónde vendrá este
@@ -704,6 +721,21 @@ de Alpha Vantage configurada como variable de entorno.
 ``` bash
 uv run python -m app.main AAPL
 ```
+
+Para tickers no estadounidenses (ej. acciones españolas cotizando
+opciones en MEFF), pasa `--currency`:
+
+``` bash
+uv run python -m app.main SAN --currency EUR
+```
+
+`--exchange` normalmente se deja en `SMART` (SmartRouting de IBKR
+encuentra el mercado correcto solo); solo hace falta especificarlo si
+necesitas forzar un enrutamiento concreto. Nota: `AlphaVantageProvider`
+sigue usando el ticker tal cual para los datos fundamentales de la
+empresa — si el símbolo necesita un sufijo distinto en AlphaVantage
+para mercados no estadounidenses (ej. `SAN.MC`), eso no está resuelto
+todavía; solo afecta a la tabla "Company", no a la de opciones.
 
 Esto **no se puede validar en un entorno aislado sin conexión a IBKR**;
 es la parte que cada colaborador debe probar en su propia máquina antes

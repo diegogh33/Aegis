@@ -13,11 +13,23 @@ from app.services.analysis_service import AnalysisService
 console = Console()
 
 
-def analyze(ticker: str) -> None:
-    asyncio.run(_analyze(ticker))
+def analyze(
+    ticker: str,
+    exchange: str = "SMART",
+    currency: str = "USD",
+) -> None:
+    """
+    Analyzes a ticker's Cash Secured Put candidates.
+
+    For non-US underlyings (e.g. Spanish stocks on MEFF), pass
+    --currency EUR. --exchange usually stays "SMART" (IBKR's
+    SmartRouting finds the right market) unless a specific routing
+    is needed.
+    """
+    asyncio.run(_analyze(ticker, exchange=exchange, currency=currency))
 
 
-async def _analyze(ticker: str) -> None:
+async def _analyze(ticker: str, exchange: str, currency: str) -> None:
 
     alpha = AlphaVantageProvider()
     ibkr = IBKRProvider()
@@ -37,7 +49,9 @@ async def _analyze(ticker: str) -> None:
             ibkr_provider=ibkr,
         )
 
-        result = await service.analyze(ticker)
+        result = await service.analyze(
+            ticker, exchange=exchange, currency=currency
+        )
 
         company = result.company
 

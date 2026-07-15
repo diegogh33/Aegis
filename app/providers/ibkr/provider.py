@@ -79,9 +79,14 @@ class IBKRProvider:
         if self.ib.isConnected():
             self.ib.disconnect()
 
-    async def get_option_chain(self, symbol: str) -> dict:
+    async def get_option_chain(
+        self,
+        symbol: str,
+        exchange: str = "SMART",
+        currency: str = "USD",
+    ) -> dict:
 
-        stock = Stock(symbol, "SMART", "USD")
+        stock = Stock(symbol, exchange, currency)
 
         qualified = await self.ib.qualifyContractsAsync(stock)
 
@@ -116,7 +121,12 @@ class IBKRProvider:
             "strikes": sorted(chain.strikes),
         }
 
-    async def get_underlying_price(self, symbol: str) -> Decimal | None:
+    async def get_underlying_price(
+        self,
+        symbol: str,
+        exchange: str = "SMART",
+        currency: str = "USD",
+    ) -> Decimal | None:
         """
         Returns the current market price of the underlying stock,
         independent of any option contract's own market data.
@@ -130,7 +140,7 @@ class IBKRProvider:
 
         if stock_contract is None:
 
-            stock = Stock(symbol, "SMART", "USD")
+            stock = Stock(symbol, exchange, currency)
 
             qualified = await self.ib.qualifyContractsAsync(stock)
 
@@ -148,9 +158,13 @@ class IBKRProvider:
     async def get_put_contracts(
         self,
         symbol: str,
+        exchange: str = "SMART",
+        currency: str = "USD",
     ) -> list[OptionContract]:
 
-        chain = await self.get_option_chain(symbol)
+        chain = await self.get_option_chain(
+            symbol, exchange=exchange, currency=currency
+        )
 
         contracts: list[OptionContract] = []
 
@@ -162,6 +176,7 @@ class IBKRProvider:
                 strike=0,
                 right="P",
                 exchange=chain["exchange"],
+                currency=currency,
             )
 
             details = await self.ib.reqContractDetailsAsync(option)
