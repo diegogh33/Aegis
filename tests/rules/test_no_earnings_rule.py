@@ -32,3 +32,9 @@ def test_earnings_too_close_should_fail_and_block():
 
     assert result.status is RuleStatus.FAIL
     assert result.blocker is True
+
+
+def test_reads_minimum_days_from_constitution_yaml_by_default():
+    rule = NoUpcomingEarningsRule()
+
+    assert rule.minimum_days == 14

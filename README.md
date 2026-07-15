@@ -308,6 +308,16 @@ CLI / Dashboard
     nunca comprobaba `minimum_open_interest`). El filtrado de
     liquidez y spread ahora ocurre una sola vez, en un solo sitio, con
     los valores reales de la Constitution.
+-   **Las 6 reglas de Constitution existentes ya leen
+    `constitution.yaml` de forma consistente.** `DeltaRule` y
+    `NoUpcomingEarningsRule` tenían sus umbrales hardcodeados en el
+    constructor pese a que los mismos valores ya existían en el YAML
+    (`delta.preferred`/`delta.warning`, `earnings.minimum_days`).
+    Ahora ambas siguen el mismo patrón que `DTERule`/`LiquidityRule`/
+    `SpreadRule`: leen `Settings` por defecto, con override explícito
+    disponible en el constructor (usado en tests). Los valores por
+    defecto no cambiaron — solo se volvieron editables desde el YAML
+    sin tocar código.
 
 ## Lo que NO funciona todavía / limitaciones conocidas
 
@@ -321,15 +331,6 @@ CLI / Dashboard
     `OVERVIEW` no lo trae; probablemente haga falta
     `EARNINGS_CALENDAR`). Mientras tanto, `NoUpcomingEarningsRule`
     siempre pasa porque el dato es `None`.
--   **Inconsistencia: no todas las reglas leen `constitution.yaml`.**
-    `DTERule`, `LiquidityRule` y `SpreadRule` sí leen sus umbrales
-    del YAML vía `Settings` (el principio "Configuration First" del
-    proyecto), pero `DeltaRule` y `NoUpcomingEarningsRule` los tienen
-    hardcodeados en su constructor, duplicando valores que ya existen
-    en `constitution.yaml` (`delta.preferred`/`delta.warning`,
-    `earnings.minimum_days`). Cambiar sus umbrales hoy requiere tocar
-    código, no solo el YAML. Pendiente de unificar en un commit
-    dedicado.
 -   Queda 1 regla bloqueante por implementar de las 7 que define
     `constitution.yaml`: `IVRankFilter` — bloqueado por falta de
     histórico de IV fiable (ninguno de los 3 proveedores de datos da
@@ -693,9 +694,9 @@ de dar un cambio por terminado.
         con umbrales que no coincidían con el YAML) eliminado.
 -   [ ] Implementar la regla de Constitution que falta (IVR —
         bloqueado por falta de histórico de IV fiable).
--   [ ] Unificar `DeltaRule`/`NoUpcomingEarningsRule` para que lean
-        `constitution.yaml` igual que `DTERule`/`LiquidityRule`/
-        `SpreadRule`, en vez de tener umbrales hardcodeados.
+-   [x] Unificar `DeltaRule`/`NoUpcomingEarningsRule` para que lean
+        `constitution.yaml` igual que las demás reglas, en vez de
+        tener umbrales hardcodeados.
 -   [ ] Construir `ConstitutionEngine` real conectado al flujo.
 -   [ ] Resolver los errores de `mypy`.
 -   [ ] Confirmar el comportamiento de datos de IBKR con el mercado

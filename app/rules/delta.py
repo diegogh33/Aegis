@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from app.config.settings import Settings
 from app.core.result import RuleResult
 from app.core.rule_status import RuleStatus
 from app.rules.base import Rule
@@ -14,6 +15,11 @@ class DeltaRule(Rule):
     pass_min is WARNING, not FAIL - it still passes the Constitution
     but is scored lower, preserving the existing tolerance band
     instead of turning this into a strict binary cutoff.
+
+    Reads pass_min/pass_max/warning_min from constitution.yaml
+    (cash_secured_put.delta.preferred.min/max,
+    cash_secured_put.delta.warning.min) via Settings by default,
+    following DTERule's pattern.
     """
 
     id = "DELTA"
@@ -24,10 +30,26 @@ class DeltaRule(Rule):
 
     def __init__(
         self,
-        pass_min: float = -0.25,
-        pass_max: float = -0.15,
-        warning_min: float = -0.35,
+        pass_min: float | None = None,
+        pass_max: float | None = None,
+        warning_min: float | None = None,
+        settings: Settings | None = None,
     ):
+        if pass_min is None or pass_max is None or warning_min is None:
+
+            settings = settings or Settings()
+
+            delta_config = settings.get("cash_secured_put", "delta")
+
+            if pass_min is None:
+                pass_min = delta_config["preferred"]["min"]
+
+            if pass_max is None:
+                pass_max = delta_config["preferred"]["max"]
+
+            if warning_min is None:
+                warning_min = delta_config["warning"]["min"]
+
         self.pass_min = pass_min
         self.pass_max = pass_max
         self.warning_min = warning_min

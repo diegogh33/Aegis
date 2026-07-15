@@ -34,3 +34,17 @@ def test_missing_delta_should_fail_and_block():
 
     assert result.status is RuleStatus.FAIL
     assert result.blocker is True
+
+
+def test_reads_thresholds_from_constitution_yaml_by_default():
+    """
+    Regression guard for the "Configuration First" principle,
+    matching DTERule/LiquidityRule/SpreadRule's pattern: DeltaRule
+    should read config/constitution.yaml when no explicit thresholds
+    are given, not hardcode its own defaults.
+    """
+    rule = DeltaRule()
+
+    assert rule.pass_min == -0.25
+    assert rule.pass_max == -0.15
+    assert rule.warning_min == -0.35
