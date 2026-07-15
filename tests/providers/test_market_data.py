@@ -2,10 +2,12 @@ import math
 from decimal import Decimal
 
 from ib_async import Ticker
+from ib_async.objects import OptionComputation
 
 from app.providers.ibkr.market_data import (
     _decimal_or_none,
     _has_any_price,
+    _select_greeks,
     _to_market_data,
 )
 
@@ -106,3 +108,51 @@ def test_maps_bid_ask_mark_correctly():
     assert market_data.bid == Decimal("4.0")
     assert market_data.ask == Decimal("4.2")
     assert market_data.mark == Decimal("4.1")
+
+
+def test_select_greeks_prefers_model_when_available():
+    ticker = Ticker()
+    ticker.modelGreeks = OptionComputation(tickAttrib=0, delta=-0.20)
+    ticker.bidGreeks = OptionComputation(tickAttrib=0, delta=-0.25)
+
+    greeks, source = _select_greeks(ticker)
+
+    assert source == "model"
+    assert greeks.delta == -0.20
+
+
+def test_select_greeks_falls_back_to_bid_when_model_missing():
+    """
+    Regression test: less liquid strikes (confirmed with ACN, ~14%
+    OTM) can leave modelGreeks as None indefinitely, even with a real
+    price available and after polling. bidGreeks/askGreeks are
+    computed directly from the quoted price rather than the model's
+    own "fair" price, so they're a reasonable fallback rather than
+    leaving delta empty.
+    """
+    ticker = Ticker()
+    ticker.bidGreeks = OptionComputation(tickAttrib=0, delta=-0.18)
+
+    greeks, source = _select_greeks(ticker)
+
+    assert source == "bid"
+    assert greeks.delta == -0.18
+
+
+def test_select_greeks_falls_back_to_ask_when_model_and_bid_missing():
+    ticker = Ticker()
+    ticker.askGreeks = OptionComputation(tickAttrib=0, delta=-0.15)
+
+    greeks, source = _select_greeks(ticker)
+
+    assert source == "ask"
+    assert greeks.delta == -0.15
+
+
+def test_select_greeks_returns_none_when_nothing_available():
+    ticker = Ticker()
+
+    greeks, source = _select_greeks(ticker)
+
+    assert greeks is None
+    assert source == "none"

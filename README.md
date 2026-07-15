@@ -508,6 +508,25 @@ CLI / Dashboard
     21-ago (delta -0.343, score 66.4) — y el resto de rechazos
     pasaron a tener motivos de mercado real (delta fuera de rango,
     spread ancho, poco volumen) en vez de "sin datos".
+-   **Fallback a `bidGreeks`/`askGreeks` cuando `modelGreeks` no
+    converge, ni siquiera con el poll.** Probando ACN (mismo mercado
+    US, misma suscripción, sin errores de datos), todos los
+    contratos evaluados llegaban con precio disponible pero sin
+    Greeks — a diferencia de AAPL, donde el poll ya resolvía el
+    caso. Diferencia observada: los strikes de ACN sin Greeks
+    incluían opciones bastante alejadas del precio (~14% OTM), donde
+    el modelo de IBKR aparentemente no siempre converge, sea cual
+    sea el tiempo de espera — no es un problema de timing sino de
+    falta de confianza del modelo en strikes menos líquidos.
+    `MarketDataProvider.get()` ahora, si `modelGreeks` sigue `None`
+    tras el poll, cae a `bidGreeks` y después a `askGreeks`
+    (`_select_greeks()`) — calculados directamente sobre el precio
+    cotizado de bid/ask en vez del precio "justo" del modelo, así
+    que pueden diferir ligeramente (más con spread ancho), pero un
+    delta aproximado es más útil que ninguno para un strike que sí
+    tiene cotización real. Queda registrado en el log de diagnóstico
+    cuándo el delta viene del modelo vs. de este fallback, para
+    poder distinguirlo si hace falta.
 
 ## Lo que NO funciona todavía / limitaciones conocidas
 

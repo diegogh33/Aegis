@@ -5,6 +5,7 @@ import math
 from decimal import Decimal
 
 from ib_async import IB, Ticker
+from ib_async.objects import OptionComputation
 from loguru import logger
 
 from app.models.market_data import MarketData
@@ -96,6 +97,25 @@ def _to_market_data(
     )
 
 
+def _select_greeks(ticker: Ticker) -> tuple[OptionComputation | None, str]:
+    """
+    Returns (greeks, source) - the best available Greeks object for a
+    ticker, preferring modelGreeks, falling back to bidGreeks then
+    askGreeks. `source` is "model", "bid", "ask", or "none".
+    """
+
+    if ticker.modelGreeks is not None:
+        return ticker.modelGreeks, "model"
+
+    if ticker.bidGreeks is not None:
+        return ticker.bidGreeks, "bid"
+
+    if ticker.askGreeks is not None:
+        return ticker.askGreeks, "ask"
+
+    return None, "none"
+
+
 class MarketDataProvider:
     """
     Retrieves market data from Interactive Brokers.
@@ -183,6 +203,19 @@ class MarketDataProvider:
                 if greeks is not None:
                     break
 
+        greeks_source = "model"
+
+        # For less liquid strikes, IBKR's model computation may never
+        # converge even with a price available - modelGreeks stays
+        # None indefinitely, not just slow to arrive. bidGreeks/
+        # askGreeks are computed directly from the quoted bid/ask
+        # price rather than the model's own "fair" price, so they can
+        # differ slightly (especially with a wide spread), but a
+        # slightly-approximate delta is more useful than none at all
+        # for a strike that otherwise has real quotes.
+        if greeks is None:
+            greeks, greeks_source = _select_greeks(ticker)
+
         if not _has_any_price(ticker):
             logger.debug(
                 "No market data for {symbol} (marketDataType={type}), "
@@ -194,9 +227,17 @@ class MarketDataProvider:
             )
         elif greeks is None:
             logger.debug(
-                "{symbol}: price available but no Greeks after polling "
-                "for up to 3 extra seconds.",
+                "{symbol}: price available but no Greeks (model, bid, "
+                "or ask) after polling for up to 3 extra seconds.",
                 symbol=getattr(contract, "localSymbol", contract),
+            )
+        elif greeks_source != "model":
+            logger.debug(
+                "{symbol}: modelGreeks never converged, using {source} "
+                "Greeks instead (derived from the quoted {source} "
+                "price, may differ slightly from the model's).",
+                symbol=getattr(contract, "localSymbol", contract),
+                source=greeks_source,
             )
 
         self.ib.cancelMktData(contract)
