@@ -8,13 +8,19 @@ from app.rules.base import Rule
 class DeltaRule(Rule):
     """
     Evaluates whether the option delta is within the acceptable range.
+
+    This is a blocking rule, but only for the FAIL case (delta outside
+    warning_min/pass_max entirely). A delta between warning_min and
+    pass_min is WARNING, not FAIL - it still passes the Constitution
+    but is scored lower, preserving the existing tolerance band
+    instead of turning this into a strict binary cutoff.
     """
 
     id = "DELTA"
 
     name = "Delta"
 
-    blocker = False
+    blocker = True
 
     def __init__(
         self,
@@ -36,6 +42,7 @@ class DeltaRule(Rule):
                 status=RuleStatus.FAIL,
                 score=Decimal("0"),
                 message="Delta unavailable",
+                blocker=True,
             )
 
         if self.pass_min <= delta <= self.pass_max:
@@ -59,4 +66,5 @@ class DeltaRule(Rule):
             status=RuleStatus.FAIL,
             score=Decimal("0"),
             message=f"Delta {delta:.2f} is outside the allowed range.",
+            blocker=True,
         )

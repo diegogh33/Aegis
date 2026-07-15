@@ -56,3 +56,34 @@ def test_dte_outside_range_should_be_rejected_even_if_approved():
 
     assert report.passed is False
     assert report.recommendation is Recommendation.REJECT
+
+
+def test_delta_far_outside_range_should_be_rejected_even_if_approved():
+    candidate = build_candidate(
+        delta=-0.60,
+        approved=True,
+        next_earnings=date.today() + timedelta(days=30),
+    )
+
+    report = CashSecuredPutStrategy().evaluate(candidate)
+
+    assert report.passed is False
+    assert report.recommendation is Recommendation.REJECT
+
+
+def test_delta_in_warning_band_should_not_be_rejected():
+    """
+    A delta in the WARNING tolerance band (-0.35 to -0.25) should
+    still pass the Constitution end to end - only a FAIL (outside
+    -0.35/-0.15 entirely, or missing) blocks.
+    """
+    candidate = build_candidate(
+        delta=-0.28,
+        approved=True,
+        next_earnings=date.today() + timedelta(days=30),
+    )
+
+    report = CashSecuredPutStrategy().evaluate(candidate)
+
+    assert report.passed is True
+    assert report.recommendation is not Recommendation.REJECT

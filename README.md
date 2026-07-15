@@ -279,6 +279,16 @@ CLI / Dashboard
     umbrales de `constitution.yaml` a través de `Settings` en vez de
     tenerlos hardcodeados — ver nota en limitaciones sobre esta
     inconsistencia.
+-   **`DeltaRule` — cuarta regla, ahora también bloqueante.**
+    Antes solo aportaba puntuación (`blocker = False`); ahora
+    descarta candidatos cuyo delta caiga fuera del rango completo
+    (`warning_min`/`pass_max`, -0.35/-0.15 por defecto) o venga
+    ausente. Deliberadamente **no** bloquea el estado intermedio
+    `WARNING` (delta algo más agresivo que el preferido, entre
+    `warning_min` y `pass_min`): ese matiz de tolerancia con criterio
+    ya existía en el diseño de la regla y se ha conservado — solo
+    penaliza en score, no rechaza. Solo `FAIL` (fuera de rango del
+    todo, o delta ausente) bloquea.
 
 ## Lo que NO funciona todavía / limitaciones conocidas
 
@@ -301,13 +311,14 @@ CLI / Dashboard
     `earnings.minimum_days`). Cambiar sus umbrales hoy requiere tocar
     código, no solo el YAML. Pendiente de unificar en un commit
     dedicado.
--   Quedan 3 reglas bloqueantes por implementar de las 7 que define
-    `constitution.yaml`: `DeltaFilter` (existe `DeltaRule` con
-    scoring, pero no como filtro duro), `IVRankFilter` (bloqueado por
-    falta de histórico de IV fiable — ver limitación de datos más
-    abajo), `LiquidityFilter` como regla bloqueante (hoy es un
-    servicio aparte, `app/services/liquidity_filter.py`, fuera del
-    `RuleEngine`), y filtro de spread.
+-   Quedan 2 reglas bloqueantes por implementar de las 7 que define
+    `constitution.yaml`: `IVRankFilter` (bloqueado por falta de
+    histórico de IV fiable — ver limitación de datos más abajo),
+    `LiquidityFilter` como regla bloqueante (hoy es un servicio
+    aparte, `app/services/liquidity_filter.py`, fuera del
+    `RuleEngine`), y filtro de spread — este último puede
+    implementarse ya, ya que `LiquidityFilter` de servicio ya calcula
+    algo parecido, solo falta llevarlo al `RuleEngine`.
 -   **`mypy app` reporta 20 errores** (subió ligeramente de 17 a 20:
     el nuevo código de `get_underlying_price()` en
     `providers/ibkr/provider.py` toca el mismo problema de tipos ya
@@ -656,8 +667,10 @@ de dar un cambio por terminado.
         siempre `None`).
 -   [x] `DTERule` implementada y conectada (lee de
         `constitution.yaml`).
--   [ ] Implementar las reglas de Constitution que faltan (Delta como
-        filtro duro, IVR, liquidez como filtro duro, spread).
+-   [x] `DeltaRule` convertida en regla bloqueante (solo `FAIL`
+        bloquea; `WARNING` sigue pasando con score reducido).
+-   [ ] Implementar las reglas de Constitution que faltan (IVR,
+        liquidez como filtro duro, spread).
 -   [ ] Unificar `DeltaRule`/`NoUpcomingEarningsRule` para que lean
         `constitution.yaml` igual que `DTERule`, en vez de tener
         umbrales hardcodeados.
