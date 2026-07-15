@@ -42,10 +42,12 @@ class IBKRProvider:
         )
 
         #
-        # Utilizar datos retrasados cuando la API no tenga permisos
-        # de tiempo real.
+        # La cuenta tiene suscripción de datos en tiempo real
+        # (US Securities Snapshot and Futures Value Bundle +
+        # US Equity and Options Add-On Streaming Bundle), así que
+        # pedimos datos en vivo en vez de forzar delayed.
         #
-        self.ib.reqMarketDataType(3)
+        self.ib.reqMarketDataType(1)
 
     async def disconnect(self) -> None:
 

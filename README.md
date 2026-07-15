@@ -298,19 +298,29 @@ CLI / Dashboard
     ejecución del flujo actual pero indican inconsistencias de tipos
     reales. Pendientes de una limpieza dedicada — requiere validación
     contra IBKR real.
--   **Suscripción de market data de IBKR insuficiente para opciones
-    US.** Confirmado en pruebas reales: `Error 10091 - Part of
-    requested market data requires additional subscription for API`.
-    Esto no es un bug de Aegis — es una limitación de la suscripción
-    de datos de mercado de la cuenta IBKR usada. Mientras no se
-    resuelva (contratando la suscripción correspondiente en IBKR),
-    la mayoría de contratos llegarán con `bid`/`ask`/Greeks en `None`
-    y `LiquidityFilter` los mantendrá igualmente (comportamiento de
-    "modo desarrollo" ya documentado), pero el scoring real sobre esos
-    contratos será poco significativo al faltar datos de mercado.
--   **IBKR con datos delayed** (`reqMarketDataType(3)` en el histórico
-    de pruebas manuales) — los Greeks e IV pueden no ser en tiempo
-    real según el tipo de suscripción de market data usada.
+-   **Suscripción de opciones de IBKR contratada — error 10091
+    resuelto, pero datos aún vacíos, causa pendiente de confirmar.**
+    Se contrató el `US Equity and Options Add-On Streaming Bundle`
+    ($4.50/mes) en Client Portal, y el error 10091 dejó de aparecer.
+    Sin embargo, en la prueba posterior (fuera de horario de mercado
+    US) `bid`/`ask`/Greeks/volumen siguieron llegando vacíos para las
+    10 opciones, sin ningún error. Dos cambios se han hecho para
+    investigar y facilitar el diagnóstico, pero **falta confirmar el
+    resultado con el mercado US abierto** (15:30–22:00 hora de
+    Madrid, aprox.) antes de dar esto por resuelto o seguir tocando
+    código:
+    -   `IBKRProvider.connect()` ahora pide datos en tiempo real
+        (`reqMarketDataType(1)`) en vez de forzar delayed (tipo 3),
+        ya que la cuenta tiene suscripción real-time de pago.
+    -   `MarketDataProvider` registra un log (`loguru`, nivel DEBUG,
+        visible por `stderr` sin configuración adicional) con el
+        `ticker.marketDataType` cuando no llega ningún dato, para
+        saber en la próxima prueba si IBKR está sirviendo tipo
+        delayed/frozen en vez de live, sin tener que adivinar.
+-   **IBKR con datos delayed** (`reqMarketDataType(3)`, usado hasta
+    este commit) — ya no se fuerza por defecto (ver punto anterior),
+    pero queda como referencia si en el futuro hace falta volver a
+    delayed (por ejemplo, en cuentas sin suscripción real-time).
 
 ------------------------------------------------------------------------
 

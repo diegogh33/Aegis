@@ -5,6 +5,7 @@ import math
 from decimal import Decimal
 
 from ib_async import IB, Ticker
+from loguru import logger
 
 from app.models.market_data import MarketData
 
@@ -64,6 +65,15 @@ class MarketDataProvider:
 
         underlying = _decimal_or_none(ticker.marketPrice())
 
+        if bid is None and ask is None and last is None:
+            logger.debug(
+                "No market data for {symbol} (marketDataType={type}). "
+                "This is expected outside market hours, or if the "
+                "contract has no recent trading activity.",
+                symbol=getattr(contract, "localSymbol", contract),
+                type=ticker.marketDataType,
+            )
+
         self.ib.cancelMktData(contract)
 
         return MarketData(
@@ -109,6 +119,13 @@ class MarketDataProvider:
         await asyncio.sleep(2)
 
         price = _decimal_or_none(ticker.marketPrice())
+
+        if price is None:
+            logger.debug(
+                "No underlying price for {symbol} (marketDataType={type}).",
+                symbol=getattr(contract, "localSymbol", contract),
+                type=ticker.marketDataType,
+            )
 
         self.ib.cancelMktData(contract)
 
