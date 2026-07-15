@@ -37,84 +37,61 @@ class MetricsEngine:
 
         mark = option.mark or Decimal("0")
 
-        premium = mark * Decimal("100")
+        premium = mark * Decimal(option.multiplier)
 
-        premium_percentage = (
-            premium / (option.strike * Decimal("100"))
-        )
+        #
+        # Capital required (cash secured: strike * multiplier)
+        #
+
+        capital_required = option.strike * Decimal(option.multiplier)
+
+        #
+        # Return on capital / annualized return
+        #
+
+        if capital_required > 0:
+
+            return_on_capital = premium / capital_required
+
+        else:
+
+            return_on_capital = Decimal("0")
 
         annualized_return = (
-            premium_percentage
+            return_on_capital
             * Decimal("365")
             / Decimal(dte)
         )
 
         #
-        # Break-even
+        # Break-even and downside protection
         #
 
         break_even = option.strike - mark
 
-        #
-        # Distance to strike
-        #
-
         if underlying_price > 0:
 
-            distance_to_strike_pct = (
-                (underlying_price - option.strike)
-                / underlying_price
-            )
-
-            margin_of_safety_pct = (
+            downside_protection = (
                 (underlying_price - break_even)
                 / underlying_price
             )
 
         else:
 
-            distance_to_strike_pct = Decimal("0")
-            margin_of_safety_pct = Decimal("0")
-
-        #
-        # Spread
-        #
-
-        bid = option.bid or Decimal("0")
-        ask = option.ask or Decimal("0")
-
-        bid_ask_spread = ask - bid
-
-        if ask > 0:
-
-            bid_ask_spread_pct = (
-                bid_ask_spread / ask
-            )
-
-        else:
-
-            bid_ask_spread_pct = Decimal("0")
-
-        #
-        # Liquidity
-        #
-
-        liquidity_score = Decimal("0")
+            downside_protection = Decimal("0")
 
         return OptionMetrics(
             premium=premium.quantize(
                 Decimal("0.01"),
                 rounding=ROUND_HALF_UP,
             ),
-            premium_percentage=premium_percentage,
+            capital_required=capital_required.quantize(
+                Decimal("0.01"),
+                rounding=ROUND_HALF_UP,
+            ),
+            return_on_capital=return_on_capital,
             annualized_return=annualized_return,
-            return_on_cash=annualized_return,
             break_even=break_even,
-            distance_to_strike_pct=distance_to_strike_pct,
-            margin_of_safety_pct=margin_of_safety_pct,
-            bid_ask_spread=bid_ask_spread,
-            bid_ask_spread_pct=bid_ask_spread_pct,
-            liquidity_score=liquidity_score,
-            implied_volatility=option.implied_volatility,
+            downside_protection=downside_protection,
             days_to_expiration=dte,
         )

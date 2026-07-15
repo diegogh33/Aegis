@@ -138,17 +138,26 @@ Configuración típica:
 ``` yaml
 scoring:
   delta:
-    weight: 35
+    target: 0.20
+    weight: 30
 
   spread:
-    weight: 20
+    weight: 15
+    max_percentage: 0.20
 
   volume:
-    weight: 15
+    weight: 10
+    normalization: 100
 
   annualized_return:
-    weight: 30
+    target: 15
+    weight: 35
 ```
+
+> Nota: este es el `scoring` real tal como vive hoy en
+> `config/constitution.yaml`. `target`/`normalization` son necesarios
+> porque `OptionScoreEngine` los usa para calcular la distancia al
+> valor ideal, no solo el peso.
 
 ## Ejemplo
 
@@ -200,12 +209,9 @@ CLI / Dashboard
 
 -   Estructura de paquetes Python correcta (todos los subpaquetes de
     `app/` tienen su `__init__.py`).
--   Suite de tests ejecutable: `uv run pytest` pasa en limpio (11 tests).
+-   Suite de tests ejecutable: `uv run pytest` pasa en limpio (20
+    tests).
 -   Linting limpio: `uv run ruff check .` sin avisos.
--   Flujo de scoring (sin Constitution todavía) operativo de extremo a
-    extremo:
-    `AlphaVantageProvider` + `IBKRProvider` → `OptionScanner` →
-    `MetricsEngine` → `OptionScoreEngine` → CLI.
 -   `config/constitution.yaml` ya contiene toda la configuración de
     reglas (delta, earnings, liquidez, spread, premium, pesos de
     scoring) — la configuración va por delante del código que la
@@ -215,26 +221,49 @@ CLI / Dashboard
     con el usado por `RuleEngine`/`Strategy`. Se ha eliminado y todo
     vive ahora sobre una única interfaz: `Rule` (`app/rules/base.py`)
     + `RuleResult`/`RuleStatus` (`app/core/`).
--   `CashSecuredPutStrategy` ya evalúa dos reglas bloqueantes reales a
-    través de `RuleEngine`:
-    -   `CompanyApprovedRule` — lee `InvestmentThesis.approved` (ya
-        no es un placeholder que siempre pasa).
+-   **`CashSecuredPutStrategy` conectada a `AnalysisService`.** Cada
+    contrato recuperado de IBKR se evalúa contra la Constitution antes
+    de puntuarse; los que no pasan (bloqueantes en `FAIL`) se
+    descartan y no llegan al ranking final. Dos reglas bloqueantes
+    activas por ahora:
+    -   `CompanyApprovedRule` — lee `InvestmentThesis.approved`. **Hoy
+        está hardcodeado a `True` en `AnalysisService`** porque no
+        existe todavía una fuente de datos real de tesis de inversión
+        conectada a este repo (ver limitaciones más abajo).
     -   `NoUpcomingEarningsRule` — descarta si hay earnings dentro del
-        `minimum_days` configurado (tenía un bug de construcción de
-        `RuleResult` con argumentos posicionales incorrectos, ya
-        corregido).
+        `minimum_days` configurado. `Company.next_earnings` tampoco
+        se puebla desde ningún provider todavía, así que hoy siempre
+        es `None` y la regla pasa por defecto.
+-   **`MetricsEngine` y `OptionScoreEngine` reparados.** Antes de este
+    commit, ambos estaban rotos de forma silenciosa: `MetricsEngine`
+    construía un `OptionMetrics` con campos que no existían en el
+    dataclass real (`TypeError` garantizado en cuanto se ejecutara), y
+    `OptionScoreEngine.evaluate()` leía Greeks/volumen desde
+    `OptionMetrics` en vez de desde `OptionContract` (donde realmente
+    viven). Como nada tenía test, el bug llevaba tiempo sin
+    detectarse — el flujo de scoring **nunca había podido ejecutarse
+    con éxito** hasta ahora, a pesar de que el README anterior lo
+    describía como "operativo".
 -   `tests/conftest.py` centraliza los builders de `Company`,
     `OptionContract` e `InvestmentCandidate` para tests — evita
     duplicar fixtures en cada fichero de test.
+-   `AnalysisService.analyze()` tiene test de integración con mocks
+    (`tests/services/test_analysis_service.py`), cubriendo: scoring y
+    ranking de contratos elegibles, rechazo por earnings próximos, y
+    descarte de contratos sin `underlying_price`.
 
 ## Lo que NO funciona todavía / limitaciones conocidas
 
--   **`CashSecuredPutStrategy` no está conectada a `AnalysisService`
-    ni al CLI todavía.** Existe y tiene tests, pero el flujo real
-    (`uv run python -m app.main AAPL`) sigue sin aplicar ningún filtro
-    duro antes de puntuar: todo lo que llega de IBKR pasa directamente
-    al `OptionScoreEngine`. Conectar ambos es el siguiente paso hacia
-    el `ConstitutionEngine` real descrito más arriba.
+-   **No hay fuente de datos real para `InvestmentThesis.approved`.**
+    Se decide "a mano" con `approved=True` fijo en
+    `AnalysisService.analyze()`. Falta decidir de dónde vendrá este
+    dato en el futuro (¿tu biblioteca ATLAS vía algún fichero de
+    configuración? ¿input manual por CLI?).
+-   **`Company.next_earnings` no se puebla desde ningún provider.**
+    `AlphaVantageMapper.company()` no lo asigna (el endpoint
+    `OVERVIEW` no lo trae; probablemente haga falta
+    `EARNINGS_CALENDAR`). Mientras tanto, `NoUpcomingEarningsRule`
+    siempre pasa porque el dato es `None`.
 -   Solo hay 2 reglas bloqueantes implementadas
     (`CompanyApprovedRule`, `NoUpcomingEarningsRule`) de las 7 que
     define `constitution.yaml`. Faltan `DeltaFilter` (existe
@@ -242,12 +271,12 @@ CLI / Dashboard
     `IVRankFilter`, `LiquidityFilter` como regla bloqueante (hoy es un
     servicio aparte, `app/services/liquidity_filter.py`), y filtro de
     spread.
--   **`mypy app` reporta ~31 errores** repartidos entre
-    `option_score_engine.py`, `option_selector.py`,
-    `providers/ibkr/provider.py` y otros. No bloquean la ejecución del
-    flujo actual pero indican inconsistencias de tipos reales
-    (atributos que no existen, `Decimal | None` operado como si nunca
-    fuera `None`, etc.). Pendientes de una limpieza dedicada.
+-   **`mypy app` reporta 17 errores** (bajó de ~31 tras reparar
+    `MetricsEngine`/`OptionScoreEngine`), concentrados sobre todo en
+    `providers/ibkr/provider.py` (manejo de `Contract | None` de
+    `ib_async`). No bloquean la ejecución del flujo actual pero
+    indican inconsistencias de tipos reales. Pendientes de una
+    limpieza dedicada — requiere validación contra IBKR real.
 -   **IBKR con datos delayed** (`reqMarketDataType(3)` en el histórico
     de pruebas manuales) — los Greeks e IV pueden no ser en tiempo
     real según el tipo de suscripción de market data usada.
@@ -301,10 +330,15 @@ app/
 
 tests/
     conftest.py
+    engines/
+        test_metrics_engine.py
+        test_option_score_engine.py
     rules/
         test_delta_rule.py
         test_company_approved_rule.py
         test_no_earnings_rule.py
+    services/
+        test_analysis_service.py
     strategies/
         test_cash_secured_put.py
 ```
@@ -487,7 +521,7 @@ uv sync
 ```
 
 Esto instala dependencias de producción y de desarrollo
-(`pytest`, `ruff`, `mypy`, `pre-commit`).
+(`pytest`, `pytest-asyncio`, `ruff`, `mypy`, `pre-commit`).
 
 ## Ejecutar la suite de tests
 
@@ -550,7 +584,13 @@ de dar un cambio por terminado.
 -   [x] Eliminar scripts de prueba manual mezclados con tests
         automatizados.
 -   [x] Unificar los dos sistemas de reglas en uno solo.
--   [ ] Conectar `CashSecuredPutStrategy` a `AnalysisService`/CLI.
+-   [x] Conectar `CashSecuredPutStrategy` a `AnalysisService`.
+-   [x] Reparar `MetricsEngine` y `OptionScoreEngine` (estaban rotos
+        de forma silenciosa, sin test que lo detectara).
+-   [ ] Conectar una fuente de datos real para
+        `InvestmentThesis.approved` (hoy hardcodeado a `True`).
+-   [ ] Poblar `Company.next_earnings` desde un provider real (hoy
+        siempre `None`).
 -   [ ] Implementar las reglas de Constitution que faltan (DTE, IVR,
         liquidez como filtro duro, spread).
 -   [ ] Construir `ConstitutionEngine` real conectado al flujo.

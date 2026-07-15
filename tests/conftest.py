@@ -54,7 +54,7 @@ def build_company(
 
 
 def build_option(
-    delta: float | None = None,
+    delta: Decimal | float | None = None,
     underlying: str = "SAP",
 ) -> OptionContract:
     """
@@ -75,7 +75,7 @@ def build_option(
         ask=Decimal("4.2"),
         last=Decimal("4.1"),
         mark=Decimal("4.1"),
-        delta=delta,
+        delta=None if delta is None else Decimal(str(delta)),
         gamma=None,
         theta=None,
         vega=None,
@@ -86,7 +86,7 @@ def build_option(
 
 
 def build_candidate(
-    delta: float | None = None,
+    delta: Decimal | float | None = None,
     next_earnings: date | None = None,
     approved: bool = False,
 ) -> InvestmentCandidate:

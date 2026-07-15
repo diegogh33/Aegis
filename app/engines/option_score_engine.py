@@ -3,6 +3,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from app.config.settings import Settings
+from app.models.option_contract import OptionContract
 from app.models.option_metrics import OptionMetrics
 from app.models.score_result import ScoreResult
 
@@ -60,6 +61,8 @@ class OptionScoreEngine:
 
     def evaluate(
         self,
+        *,
+        option: OptionContract,
         metrics: OptionMetrics,
     ) -> ScoreResult:
 
@@ -72,10 +75,10 @@ class OptionScoreEngine:
         # Delta
         #
 
-        if metrics.delta is not None:
+        if option.delta is not None:
 
             distance = abs(
-                abs(metrics.delta) - self.delta_target
+                abs(option.delta) - self.delta_target
             )
 
             delta_score = max(
@@ -85,28 +88,36 @@ class OptionScoreEngine:
             )
 
         #
-        # Spread
+        # Spread (bid/ask, expressed as % of ask)
         #
 
-        spread_score = max(
-            0.0,
-            self.spread_weight
-            - float(
-                metrics.bid_ask_spread_pct
-                * Decimal("100")
-            ),
-        )
+        bid = option.bid or Decimal("0")
+        ask = option.ask or Decimal("0")
+
+        if ask > 0:
+
+            spread_pct = (ask - bid) / ask
+
+            spread_score = max(
+                0.0,
+                self.spread_weight
+                - float(spread_pct * Decimal("100")),
+            )
+
+        else:
+
+            spread_score = 0.0
 
         #
         # Volume
         #
 
-        if metrics.volume is not None:
+        if option.volume is not None:
 
             volume_score = min(
                 self.volume_weight,
                 float(
-                    Decimal(metrics.volume)
+                    Decimal(str(option.volume))
                     / self.volume_norm
                 ),
             )
@@ -121,6 +132,7 @@ class OptionScoreEngine:
                 self.annualized_weight,
                 float(
                     metrics.annualized_return
+                    * Decimal("100")
                     / self.target_return
                     * Decimal(self.annualized_weight)
                 ),
