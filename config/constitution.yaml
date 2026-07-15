@@ -13,6 +13,14 @@ scan:
     min: 20
     max: 60
 
+  # Cuántos strikes traer por cada vencimiento dentro de la ventana,
+  # priorizando los más cercanos al precio actual del subyacente
+  # (los relevantes para vender PUT con delta objetivo). Con
+  # subyacentes muy líquidos (ej. MSFT) un vencimiento puede tener
+  # decenas de strikes; sin este límite, cada vencimiento adicional
+  # multiplicaría las peticiones de market data.
+  strikes_per_expiration: 8
+
 cash_secured_put:
 
   delta:

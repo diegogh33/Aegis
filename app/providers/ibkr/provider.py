@@ -59,6 +59,22 @@ def _within_dte_window(
     return min_dte <= dte <= max_dte
 
 
+def _closest_strikes(
+    contracts: list[OptionContract],
+    underlying_price: Decimal,
+    limit: int,
+) -> list[OptionContract]:
+    """
+    Returns up to `limit` contracts from `contracts`, ordered by how
+    close their strike is to underlying_price (closest first).
+    """
+
+    return sorted(
+        contracts,
+        key=lambda c: abs(c.strike - underlying_price),
+    )[:limit]
+
+
 class IBKRProvider:
     """
     Wrapper around the Interactive Brokers API.
@@ -229,6 +245,17 @@ class IBKRProvider:
 
             candidate_expirations = chain["expirations"][:2]
 
+        strikes_per_expiration = self._settings.get(
+            "scan", "strikes_per_expiration"
+        )
+
+        # El precio del subyacente se pide una vez, antes de elegir
+        # qué strikes traer por vencimiento - sin él no hay forma de
+        # saber cuáles son los "cercanos".
+        underlying_price = await self.get_underlying_price(
+            symbol, exchange=exchange, currency=currency
+        )
+
         contracts: list[OptionContract] = []
 
         for expiration in candidate_expirations:
@@ -244,6 +271,8 @@ class IBKRProvider:
 
             details = await self.ib.reqContractDetailsAsync(option)
 
+            expiration_contracts: list[OptionContract] = []
+
             for detail in details:
 
                 contract = detail.contract
@@ -257,7 +286,36 @@ class IBKRProvider:
                     option_contract.con_id
                 ] = contract
 
-                contracts.append(option_contract)
+                expiration_contracts.append(option_contract)
+
+            if underlying_price is not None:
+
+                kept = min(strikes_per_expiration, len(expiration_contracts))
+
+                logger.debug(
+                    "{symbol} {expiration}: {total} strikes available, "
+                    "keeping the {kept} closest to underlying price "
+                    "{price}.",
+                    symbol=symbol,
+                    expiration=expiration,
+                    total=len(expiration_contracts),
+                    kept=kept,
+                    price=underlying_price,
+                )
+
+                expiration_contracts = _closest_strikes(
+                    expiration_contracts,
+                    underlying_price,
+                    strikes_per_expiration,
+                )
+
+            else:
+
+                expiration_contracts = expiration_contracts[
+                    :strikes_per_expiration
+                ]
+
+            contracts.extend(expiration_contracts)
 
         contracts.sort(
             key=lambda c: (

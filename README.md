@@ -392,6 +392,22 @@ CLI / Dashboard
     peticiones de mercado en vencimientos demasiado cortos. Si ningún
     vencimiento cae dentro de la ventana, cae de vuelta a los 2 más
     próximos en vez de devolver una lista vacía.
+-   **Strikes seleccionados por cercanía al precio del subyacente
+    (`scan.strikes_per_expiration`, 8 por defecto), no arbitrariamente.**
+    Detectado probando SAN con el nuevo filtro de ventana de
+    vencimientos: `OptionScanner` tenía un corte global
+    `contracts[:10]` aplicado *después* de juntar los contratos de
+    varios vencimientos — con un vencimiento cercano aportando ya 10+
+    strikes, el corte se comía entero ese vencimiento y descartaba
+    los otros dos sin que el usuario llegara a verlos. Ahora el límite
+    se aplica por vencimiento, dentro de `IBKRProvider.get_put_contracts()`,
+    seleccionando los `strikes_per_expiration` más cercanos al precio
+    actual del subyacente (los relevantes para vender PUT con delta
+    objetivo) en vez de tomar los primeros N tal como llegan de IBKR.
+    El corte global `contracts[:10]` en `OptionScanner` se ha
+    eliminado por quedar redundante. Con subyacentes muy líquidos
+    (ej. MSFT, con decenas de strikes por vencimiento) este límite es
+    lo que evita disparar el número de peticiones de market data.
 
 ## Lo que NO funciona todavía / limitaciones conocidas
 
@@ -496,6 +512,7 @@ tests/
     providers/
         test_market_data.py
         test_dte_window.py
+        test_closest_strikes.py
     rules/
         test_delta_rule.py
         test_company_approved_rule.py

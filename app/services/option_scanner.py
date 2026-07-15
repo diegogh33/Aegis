@@ -37,9 +37,6 @@ class OptionScanner:
             symbol, exchange=exchange, currency=currency
         )
 
-        # Durante el desarrollo limitamos el número
-        contracts = contracts[:10]
-
         # El precio del subyacente se pide una sola vez por escaneo.
         # Esto existe porque, cuando la cuenta de IBKR no tiene
         # suscripción de datos de opciones (error 10091), el
