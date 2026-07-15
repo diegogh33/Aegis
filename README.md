@@ -817,6 +817,22 @@ Información fundamental:
 -   Industria
 -   etc.
 
+> **Nota importante:** hoy, de todos estos datos fundamentales,
+> **ninguno afecta a la Constitution ni al scoring**. La única
+> excepción prevista es `Company.next_earnings` (usado por
+> `NoUpcomingEarningsRule`), pero ese campo tampoco se puebla desde
+> AlphaVantage todavía — el endpoint que lo daría
+> (`EARNINGS_CALENDAR`) devuelve CSV en vez de JSON y no está
+> integrado (ver limitaciones). AlphaVantage es, por ahora,
+> **puramente informativo**: solo alimenta la tabla "Company" del
+> CLI. Con el límite del plan gratuito (25 peticiones/día,
+> confirmado en real durante esta sesión de trabajo) fácil de agotar,
+> es una dependencia de bajo coste técnico (falla con gracia, no
+> bloquea el análisis de opciones) pero de valor limitado hasta que
+> se conecte algo que sí influya en las decisiones — `next_earnings`
+> real, o una futura regla de "calidad de empresa" basada en estos
+> fundamentales.
+
 ## Interactive Brokers
 
 Actualmente:
