@@ -408,16 +408,31 @@ CLI / Dashboard
     eliminado por quedar redundante. Con subyacentes muy líquidos
     (ej. MSFT, con decenas de strikes por vencimiento) este límite es
     lo que evita disparar el número de peticiones de market data.
+-   **El CLI ya no revienta si Alpha Vantage no reconoce el ticker
+    (confirmado con ITX: `KeyError: 'Symbol'` sin control).**
+    `AlphaVantageMapper.company()` accedía a `data["Symbol"]`
+    directamente; para tickers no reconocidos (típicamente no-US sin
+    el sufijo de mercado correcto), Alpha Vantage devuelve un JSON
+    vacío `{}` en vez de un error explícito, y eso tumbaba todo el
+    CLI — incluida la parte de opciones, que es completamente
+    independiente (IBKR) y no tiene motivo para fallar por esto.
+    Ahora el mapper lanza `UnknownCompanyError` de forma controlada;
+    `AnalysisService.analyze()` la captura y continúa con un
+    `Company.unknown()` (placeholder) y `company_known=False` en el
+    resultado; el CLI se salta la tabla "Company" y muestra un aviso
+    explícito en su lugar, mientras la tabla de opciones sigue
+    funcionando con normalidad.
 
 ## Lo que NO funciona todavía / limitaciones conocidas
 
--   **`AlphaVantageProvider` no está adaptado a tickers no
-    estadounidenses.** Usa el símbolo tal cual (ej. `SAN`), pero
-    AlphaVantage suele necesitar un sufijo de mercado para acciones
-    fuera de US (ej. `SAN.MC` para Madrid, sin confirmar el sufijo
-    exacto). Con un ticker europeo, la tabla "Company" puede salir
-    vacía o fallar aunque la tabla de opciones (que solo depende de
-    IBKR) funcione bien — son proveedores independientes.
+-   **`AlphaVantageProvider` sigue sin adaptarse de verdad a tickers
+    no estadounidenses** — ya no revienta (ver arriba), pero el
+    símbolo se sigue enviando tal cual (ej. `ITX`), sin el sufijo de
+    mercado que Alpha Vantage probablemente necesita (ej. `ITX.MC`
+    para Madrid, sin confirmar el sufijo exacto). Con un ticker
+    europeo sin ese sufijo, la tabla "Company" no aparecerá — la
+    tabla de opciones (que solo depende de IBKR) sigue funcionando
+    igual, son proveedores independientes.
 -   **No hay fuente de datos real para `InvestmentThesis.approved`.**
     Se decide "a mano" con `approved=True` fijo en
     `AnalysisService.analyze()`. Falta decidir de dónde vendrá este
@@ -513,6 +528,7 @@ tests/
         test_market_data.py
         test_dte_window.py
         test_closest_strikes.py
+        test_alphavantage_mapper.py
     rules/
         test_delta_rule.py
         test_company_approved_rule.py

@@ -5,6 +5,19 @@ from decimal import Decimal
 from app.models.company import Company
 
 
+class UnknownCompanyError(Exception):
+    """
+    Raised when Alpha Vantage's OVERVIEW response doesn't contain
+    company data - typically because the symbol isn't recognized
+    (e.g. a non-US ticker without the market suffix Alpha Vantage
+    expects, like "ITX" instead of "ITX.MC"). Alpha Vantage returns
+    an empty JSON object ({}) for this case rather than an explicit
+    error field, so this has to be detected by checking for the
+    required keys rather than relying on the client's existing
+    "Error Message"/"Information" handling.
+    """
+
+
 class AlphaVantageMapper:
     """
     Converts Alpha Vantage JSON responses into domain models.
@@ -12,6 +25,14 @@ class AlphaVantageMapper:
 
     @staticmethod
     def company(data: dict) -> Company:
+
+        if "Symbol" not in data or "Name" not in data:
+            raise UnknownCompanyError(
+                "Alpha Vantage did not return company data for this "
+                "symbol. This usually means the ticker isn't "
+                "recognized (e.g. a non-US ticker needs a market "
+                "suffix Alpha Vantage doesn't have, like '.MC')."
+            )
 
         def decimal_or_none(value: str | None) -> Decimal | None:
             if not value or value in ("None", "-", ""):
@@ -32,18 +53,18 @@ class AlphaVantageMapper:
 
             symbol=data["Symbol"],
             name=data["Name"],
-            currency=data["Currency"],
-            exchange=data["Exchange"],
-            sector=data["Sector"],
-            industry=data["Industry"],
-            country=data["Country"],
-            description=data["Description"],
+            currency=data.get("Currency", "N/A"),
+            exchange=data.get("Exchange", "N/A"),
+            sector=data.get("Sector", "N/A"),
+            industry=data.get("Industry", "N/A"),
+            country=data.get("Country", "N/A"),
+            description=data.get("Description", ""),
 
             # -----------------------------------------------------------------
             # Market data
             # -----------------------------------------------------------------
 
-            market_cap=int(data["MarketCapitalization"]),
+            market_cap=int_or_none(data.get("MarketCapitalization")) or 0,
             pe_ratio=decimal_or_none(data.get("PERatio")),
             peg_ratio=decimal_or_none(data.get("PEGRatio")),
             eps=decimal_or_none(data.get("EPS")),

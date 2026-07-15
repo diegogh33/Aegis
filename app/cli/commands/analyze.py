@@ -55,20 +55,32 @@ async def _analyze(ticker: str, exchange: str, currency: str) -> None:
 
         company = result.company
 
-        company_table = Table(title="Company")
+        if result.company_known:
 
-        company_table.add_column("Field")
-        company_table.add_column("Value")
+            company_table = Table(title="Company")
 
-        company_table.add_row("Name", company.name)
-        company_table.add_row("Ticker", company.symbol)
-        company_table.add_row("Exchange", company.exchange)
-        company_table.add_row("Sector", company.sector)
-        company_table.add_row("Industry", company.industry)
-        company_table.add_row("Market Cap", f"{company.market_cap:,}")
+            company_table.add_column("Field")
+            company_table.add_column("Value")
 
-        console.print()
-        console.print(company_table)
+            company_table.add_row("Name", company.name)
+            company_table.add_row("Ticker", company.symbol)
+            company_table.add_row("Exchange", company.exchange)
+            company_table.add_row("Sector", company.sector)
+            company_table.add_row("Industry", company.industry)
+            company_table.add_row("Market Cap", f"{company.market_cap:,}")
+
+            console.print()
+            console.print(company_table)
+
+        else:
+
+            console.print(
+                f"\n[bold yellow]⚠ Alpha Vantage doesn't recognize "
+                f"'{ticker}' - no fundamental data available.[/] "
+                f"For non-US tickers this often means a market suffix "
+                f"is needed (e.g. 'ITX.MC'). Continuing with the "
+                f"options analysis, which doesn't depend on this."
+            )
 
         options = Table(title="Best PUT Candidates")
 

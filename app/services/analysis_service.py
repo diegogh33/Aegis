@@ -3,10 +3,12 @@ from __future__ import annotations
 from app.engines.metrics_engine import MetricsEngine
 from app.engines.option_score_engine import OptionScoreEngine
 from app.models.analysis_result import AnalysisResult
+from app.models.company import Company
 from app.models.investment_candidate import InvestmentCandidate
 from app.models.investment_thesis import InvestmentThesis
 from app.models.rejected_contract import RejectedContract
 from app.models.scored_option import ScoredOption
+from app.providers.alphavantage.mapper import UnknownCompanyError
 from app.providers.alphavantage.provider import AlphaVantageProvider
 from app.providers.ibkr.provider import IBKRProvider
 from app.services.option_scanner import OptionScanner
@@ -37,7 +39,19 @@ class AnalysisService:
         currency: str = "USD",
     ) -> AnalysisResult:
 
-        company = await self.alpha.get_company(ticker)
+        company_known = True
+
+        try:
+            company = await self.alpha.get_company(ticker)
+        except UnknownCompanyError:
+            # Alpha Vantage doesn't recognize this ticker (common for
+            # non-US symbols without the right market suffix, e.g.
+            # "ITX" instead of "ITX.MC"). This only affects fundamental
+            # data display - the options analysis itself is entirely
+            # independent (IBKR), so it still makes sense to continue
+            # rather than fail the whole run.
+            company = Company.unknown(ticker)
+            company_known = False
 
         contracts = await self.scanner.scan_puts(
             ticker, exchange=exchange, currency=currency
@@ -118,4 +132,5 @@ class AnalysisService:
             company=company,
             contracts=ranked,
             rejected=rejected,
+            company_known=company_known,
         )

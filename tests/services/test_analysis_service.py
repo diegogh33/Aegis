@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from app.providers.alphavantage.mapper import UnknownCompanyError
 from app.services.analysis_service import AnalysisService
 from tests.conftest import build_company, build_option
 
@@ -109,3 +110,30 @@ async def test_analyze_tracks_contracts_without_underlying_price_as_rejected():
     assert result.contracts == []
     assert len(result.rejected) == 1
     assert result.rejected[0].reason == "NO_UNDERLYING_PRICE"
+
+
+@pytest.mark.asyncio
+async def test_analyze_continues_with_options_when_company_is_unknown():
+    """
+    Regression test: Alpha Vantage not recognizing a ticker (common
+    for non-US symbols without a market suffix, e.g. "ITX") used to
+    crash the whole run with a bare KeyError before this reached
+    AnalysisService at all. Options analysis is entirely independent
+    (IBKR-only), so it should still complete with a placeholder
+    Company and company_known=False, instead of failing everything.
+    """
+    option = build_option(delta=-0.20)
+
+    alpha = AsyncMock()
+    alpha.get_company.side_effect = UnknownCompanyError("not found")
+
+    ibkr = AsyncMock()
+
+    service = AnalysisService(alpha_provider=alpha, ibkr_provider=ibkr)
+    service.scanner.scan_puts = AsyncMock(return_value=[option])
+
+    result = await service.analyze("ITX", currency="EUR")
+
+    assert result.company_known is False
+    assert result.company.symbol == "ITX"
+    assert len(result.contracts) == 1

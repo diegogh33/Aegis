@@ -16,3 +16,4 @@ class AnalysisResult:
     company: Company
     contracts: list[ScoredOption]
     rejected: list[RejectedContract] = field(default_factory=list)
+    company_known: bool = True

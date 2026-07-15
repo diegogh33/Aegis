@@ -96,3 +96,52 @@ class Company:
     # ------------------------------------------------------------------
 
     next_earnings: date | None = None
+
+    @classmethod
+    def unknown(cls, symbol: str) -> Company:
+        """
+        Builds a placeholder Company for when fundamental data isn't
+        available (e.g. Alpha Vantage doesn't recognize the ticker -
+        common for non-US symbols without the right market suffix).
+
+        Every rule/scoring path that reads Company fields other than
+        next_earnings should be unaffected: NoUpcomingEarningsRule
+        already treats next_earnings=None as "pass" (no earnings risk
+        detectable), and nothing else in the Constitution or scoring
+        reads Company data today.
+        """
+
+        return cls(
+            symbol=symbol,
+            name="(unknown - no data from Alpha Vantage)",
+            currency="N/A",
+            exchange="N/A",
+            sector="N/A",
+            industry="N/A",
+            country="N/A",
+            description="",
+            market_cap=0,
+            pe_ratio=None,
+            peg_ratio=None,
+            eps=None,
+            book_value_per_share=None,
+            dividend_per_share=None,
+            dividend_yield=None,
+            beta=None,
+            shares_outstanding=None,
+            revenue_ttm=None,
+            gross_profit_ttm=None,
+            operating_margin=None,
+            profit_margin=None,
+            ebitda=None,
+            roe=None,
+            roa=None,
+            total_assets=None,
+            total_liabilities=None,
+            debt_to_equity=None,
+            operating_cash_flow=None,
+            free_cash_flow=None,
+            quarterly_revenue_growth=None,
+            quarterly_earnings_growth=None,
+            next_earnings=None,
+        )
