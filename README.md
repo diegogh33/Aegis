@@ -289,6 +289,25 @@ CLI / Dashboard
     ya existía en el diseño de la regla y se ha conservado — solo
     penaliza en score, no rechaza. Solo `FAIL` (fuera de rango del
     todo, o delta ausente) bloquea.
+-   **`LiquidityRule` y `SpreadRule` — quinta y sexta regla
+    bloqueante.** Sustituyen por completo al antiguo
+    `LiquidityFilter` (servicio eliminado, ver más abajo). Ambas leen
+    `constitution.yaml` (`cash_secured_put.liquidity` y
+    `cash_secured_put.spread`) vía `Settings`, igual que `DTERule`.
+    `LiquidityRule` comprueba volumen y open interest por separado
+    (el `LiquidityFilter` antiguo nunca comprobaba open interest,
+    pese a que `constitution.yaml` ya lo definía). Igual que
+    `LiquidityFilter`, ambas tratan los datos ausentes como `PASS`,
+    no como rechazo — necesario mientras IBKR no siempre devuelva
+    bid/ask/volumen/open interest (ver limitaciones de datos).
+-   **`LiquidityFilter` (servicio) eliminado.** Vivía en
+    `OptionScanner`, fuera del `RuleEngine`, con umbrales
+    hardcodeados que **no coincidían** con `constitution.yaml`
+    (`minimum_volume=1` en el servicio vs. `50` en el YAML,
+    `maximum_spread_pct=0.20` vs. `maximum_percent: 5` = 0.05, y
+    nunca comprobaba `minimum_open_interest`). El filtrado de
+    liquidez y spread ahora ocurre una sola vez, en un solo sitio, con
+    los valores reales de la Constitution.
 
 ## Lo que NO funciona todavía / limitaciones conocidas
 
@@ -303,22 +322,18 @@ CLI / Dashboard
     `EARNINGS_CALENDAR`). Mientras tanto, `NoUpcomingEarningsRule`
     siempre pasa porque el dato es `None`.
 -   **Inconsistencia: no todas las reglas leen `constitution.yaml`.**
-    `DTERule` sí lee sus umbrales del YAML vía `Settings` (el
-    principio "Configuration First" del proyecto), pero `DeltaRule` y
-    `NoUpcomingEarningsRule` los tienen hardcodeados en su
-    constructor, duplicando valores que ya existen en
-    `constitution.yaml` (`delta.preferred`/`delta.warning`,
+    `DTERule`, `LiquidityRule` y `SpreadRule` sí leen sus umbrales
+    del YAML vía `Settings` (el principio "Configuration First" del
+    proyecto), pero `DeltaRule` y `NoUpcomingEarningsRule` los tienen
+    hardcodeados en su constructor, duplicando valores que ya existen
+    en `constitution.yaml` (`delta.preferred`/`delta.warning`,
     `earnings.minimum_days`). Cambiar sus umbrales hoy requiere tocar
     código, no solo el YAML. Pendiente de unificar en un commit
     dedicado.
--   Quedan 2 reglas bloqueantes por implementar de las 7 que define
-    `constitution.yaml`: `IVRankFilter` (bloqueado por falta de
-    histórico de IV fiable — ver limitación de datos más abajo),
-    `LiquidityFilter` como regla bloqueante (hoy es un servicio
-    aparte, `app/services/liquidity_filter.py`, fuera del
-    `RuleEngine`), y filtro de spread — este último puede
-    implementarse ya, ya que `LiquidityFilter` de servicio ya calcula
-    algo parecido, solo falta llevarlo al `RuleEngine`.
+-   Queda 1 regla bloqueante por implementar de las 7 que define
+    `constitution.yaml`: `IVRankFilter` — bloqueado por falta de
+    histórico de IV fiable (ninguno de los 3 proveedores de datos da
+    IV Rank de forma consistente hoy, ver limitación más abajo).
 -   **`mypy app` reporta 20 errores** (subió ligeramente de 17 a 20:
     el nuevo código de `get_underlying_price()` en
     `providers/ibkr/provider.py` toca el mismo problema de tipos ya
@@ -386,13 +401,15 @@ app/
     rules/
         base.py
         delta.py
+        dte.py
+        liquidity.py
         no_earnings.py
+        spread.py
         company/
             company_approved_rule.py
     selectors/
     services/
         option_scanner.py
-        liquidity_filter.py
         analysis_service.py
     strategies/
     utils/
@@ -409,9 +426,10 @@ tests/
         test_company_approved_rule.py
         test_no_earnings_rule.py
         test_dte_rule.py
+        test_liquidity_rule.py
+        test_spread_rule.py
     services/
         test_analysis_service.py
-        test_liquidity_filter.py
         test_option_scanner.py
     strategies/
         test_cash_secured_put.py
@@ -537,8 +555,9 @@ Calcula puntuaciones.
 
 ## OptionScanner
 
-Obtiene opciones, las enriquece con datos de mercado y aplica filtros
-de liquidez.
+Obtiene opciones y las enriquece con datos de mercado. El filtrado
+de liquidez y spread ya no ocurre aquí — vive en la Constitution
+(`LiquidityRule`, `SpreadRule`).
 
 ## AnalysisService
 
@@ -669,11 +688,14 @@ de dar un cambio por terminado.
         `constitution.yaml`).
 -   [x] `DeltaRule` convertida en regla bloqueante (solo `FAIL`
         bloquea; `WARNING` sigue pasando con score reducido).
--   [ ] Implementar las reglas de Constitution que faltan (IVR,
-        liquidez como filtro duro, spread).
+-   [x] `LiquidityRule` y `SpreadRule` implementadas y conectadas
+        (leen de `constitution.yaml`); `LiquidityFilter` (servicio,
+        con umbrales que no coincidían con el YAML) eliminado.
+-   [ ] Implementar la regla de Constitution que falta (IVR —
+        bloqueado por falta de histórico de IV fiable).
 -   [ ] Unificar `DeltaRule`/`NoUpcomingEarningsRule` para que lean
-        `constitution.yaml` igual que `DTERule`, en vez de tener
-        umbrales hardcodeados.
+        `constitution.yaml` igual que `DTERule`/`LiquidityRule`/
+        `SpreadRule`, en vez de tener umbrales hardcodeados.
 -   [ ] Construir `ConstitutionEngine` real conectado al flujo.
 -   [ ] Resolver los errores de `mypy`.
 -   [ ] Confirmar el comportamiento de datos de IBKR con el mercado

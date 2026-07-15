@@ -6,12 +6,17 @@ from dataclasses import replace
 from app.models.market_data import MarketData
 from app.models.option_contract import OptionContract
 from app.providers.ibkr.provider import IBKRProvider
-from app.services.liquidity_filter import LiquidityFilter
 
 
 class OptionScanner:
     """
-    Retrieves, enriches and filters option contracts.
+    Retrieves and enriches option contracts with market data.
+
+    Liquidity and spread filtering used to happen here
+    (LiquidityFilter), but that duplicated - with different,
+    hardcoded thresholds - what LiquidityRule/SpreadRule now do as
+    part of the Constitution (see CashSecuredPutStrategy). Filtering
+    now happens once, in one place, reading constitution.yaml.
     """
 
     def __init__(
@@ -20,7 +25,6 @@ class OptionScanner:
     ) -> None:
 
         self.provider = provider
-        self.liquidity_filter = LiquidityFilter()
 
     async def scan_puts(
         self,
@@ -85,4 +89,4 @@ class OptionScanner:
                 )
             )
 
-        return self.liquidity_filter.apply(enriched)
+        return enriched

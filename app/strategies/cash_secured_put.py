@@ -1,7 +1,9 @@
 from app.rules.company.company_approved_rule import CompanyApprovedRule
 from app.rules.delta import DeltaRule
 from app.rules.dte import DTERule
+from app.rules.liquidity import LiquidityRule
 from app.rules.no_earnings import NoUpcomingEarningsRule
+from app.rules.spread import SpreadRule
 from app.strategies.base import Strategy
 
 
@@ -17,5 +19,7 @@ class CashSecuredPutStrategy(Strategy):
                 NoUpcomingEarningsRule(),
                 DTERule(),
                 DeltaRule(),
+                LiquidityRule(),
+                SpreadRule(),
             ]
         )
