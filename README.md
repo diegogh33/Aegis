@@ -391,7 +391,15 @@ CLI / Dashboard
     interesante (más prima a cambio de más plazo), sin gastar
     peticiones de mercado en vencimientos demasiado cortos. Si ningún
     vencimiento cae dentro de la ventana, cae de vuelta a los 2 más
-    próximos en vez de devolver una lista vacía.
+    próximos en vez de devolver una lista vacía. **Este fallback se
+    confirmó con un caso real extremo**: Inditex (ITX) en MEFFRV solo
+    tenía 3 vencimientos disponibles en el momento de la prueba, los
+    tres a años vista (2030-2031, LEAPS) — ninguno dentro de la
+    ventana 20-60. El sistema cayó correctamente a los 2 más
+    próximos (~1619 días) y los rechazó por DTE con el motivo
+    correcto, en vez de fallar o devolver algo engañoso. Esto no es
+    un bug: refleja la realidad de liquidez de opciones sobre
+    Inditex ahora mismo, no un problema de Aegis.
 -   **Strikes seleccionados por cercanía al precio del subyacente
     (`scan.strikes_per_expiration`, 8 por defecto), no arbitrariamente.**
     Detectado probando SAN con el nuevo filtro de ventana de
@@ -422,6 +430,21 @@ CLI / Dashboard
     resultado; el CLI se salta la tabla "Company" y muestra un aviso
     explícito en su lugar, mientras la tabla de opciones sigue
     funcionando con normalidad.
+-   **Fallback automático a datos delayed cuando no hay suscripción
+    en tiempo real para un mercado concreto.** Confirmado probando
+    ITX en MEFFRV: `Error 354 - Requested market data is not
+    subscribed. Delayed market data is available.` — la cuenta tiene
+    suscripción en tiempo real para US, pero no para MEFFRV, y el
+    código forzaba `reqMarketDataType(1)` (tiempo real) sin más,
+    dejando esos contratos sin datos aunque IBKR ofreciera delayed
+    como alternativa. `MarketDataProvider._request_ticker()` ahora
+    pide tiempo real primero y, si no llega ningún precio en 2
+    segundos, reintenta automáticamente con delayed
+    (`reqMarketDataType(3)`) antes de darse por vencido, restaurando
+    tiempo real después para no dejar el resto de la sesión (ej.
+    contratos US que sí tienen suscripción real) atascada en modo
+    delayed — `reqMarketDataType()` es de toda la conexión, no por
+    petición individual.
 
 ## Lo que NO funciona todavía / limitaciones conocidas
 
