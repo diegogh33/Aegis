@@ -66,6 +66,23 @@ class Settings:
             )
         )
 
+        #
+        # ATLAS (diegogh33/atlas-research) - GitHub token is optional
+        # for a public repo, but strongly recommended: unauthenticated
+        # GitHub API requests share a 60/hour rate limit across
+        # anything using the same IP.
+        #
+
+        self.github_token = os.getenv(
+            "GITHUB_TOKEN",
+            "",
+        )
+
+        self.atlas_repo = os.getenv(
+            "ATLAS_REPO",
+            "diegogh33/atlas-research",
+        )
+
     def get(
         self,
         *keys: str,

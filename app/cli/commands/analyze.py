@@ -7,6 +7,7 @@ from rich.console import Console
 from rich.table import Table
 
 from app.providers.alphavantage.provider import AlphaVantageProvider
+from app.providers.atlas.provider import AtlasProvider
 from app.providers.ibkr.provider import IBKRProvider
 from app.services.analysis_service import AnalysisService
 
@@ -33,6 +34,7 @@ async def _analyze(ticker: str, exchange: str, currency: str) -> None:
 
     alpha = AlphaVantageProvider()
     ibkr = IBKRProvider()
+    atlas = AtlasProvider()
 
     try:
 
@@ -47,6 +49,7 @@ async def _analyze(ticker: str, exchange: str, currency: str) -> None:
         service = AnalysisService(
             alpha_provider=alpha,
             ibkr_provider=ibkr,
+            atlas_provider=atlas,
         )
 
         result = await service.analyze(
@@ -151,3 +154,4 @@ async def _analyze(ticker: str, exchange: str, currency: str) -> None:
 
         await alpha.close()
         await ibkr.disconnect()
+        await atlas.close()

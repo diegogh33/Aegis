@@ -234,6 +234,29 @@ CLI / Dashboard
     `MarketData` se extrajo a una función pura (`_to_market_data`),
     testeable sin conexión a IBKR — antes solo era testeable
     end-to-end contra una conexión real.
+-   **`InvestmentThesis.approved` ya viene de datos reales: la
+    biblioteca ATLAS (`diegogh33/atlas-research`).** Antes era
+    `approved=True` fijo en `AnalysisService`, sin ninguna fuente
+    real de datos — hoy es una decisión real que refleja tu propia
+    convicción de inversión por empresa. Nuevo provider
+    (`app/providers/atlas/`): `AtlasClient` lee la API de GitHub
+    (repo configurable vía `ATLAS_REPO`, token opcional vía
+    `GITHUB_TOKEN` para evitar el rate-limit de 60/hora sin
+    autenticar), `AtlasMapper` parsea el frontmatter YAML de cada
+    fichero en `analyses/`, y `AtlasProvider` construye un índice
+    `ticker → entrada` (indexado por el campo `ticker` del propio
+    YAML, **no** por el nombre de fichero — en tu repo real hay
+    mezcla de mayúsculas/minúsculas y nombres que no coinciden con
+    el ticker, ej. `mc.pa.md` para `MC.PA`, `are.md` para `ARE`).
+    El índice se construye una vez y se cachea en memoria durante el
+    análisis. Mapeo de `valoracion` (campo real de ATLAS) a
+    `InvestmentThesis`: `alcista`/`posicion` → `approved=True`;
+    `seguimiento` → `approved=False, watchlist=True` (en observación,
+    sin convicción confirmada todavía); sin entrada en ATLAS (nunca
+    analizado) → `approved=False`, coherente con el principio de
+    ATLAS de "primero se aprueba la empresa, después se busca la
+    mejor CSP". Un fichero de análisis mal formado no rompe la
+    búsqueda del resto — se salta con un aviso.
 -   `config/constitution.yaml` ya contiene toda la configuración de
     reglas (delta, earnings, liquidez, spread, premium, pesos de
     scoring) — la configuración va por delante del código que la
@@ -496,20 +519,27 @@ CLI / Dashboard
     europeo sin ese sufijo, la tabla "Company" no aparecerá — la
     tabla de opciones (que solo depende de IBKR) sigue funcionando
     igual, son proveedores independientes.
--   **No hay fuente de datos real para `InvestmentThesis.approved`.**
-    Se decide "a mano" con `approved=True` fijo en
-    `AnalysisService.analyze()`. Falta decidir de dónde vendrá este
-    dato en el futuro (¿tu biblioteca ATLAS vía algún fichero de
-    configuración? ¿input manual por CLI?).
--   **`Company.next_earnings` no se puebla desde ningún provider.**
-    `AlphaVantageMapper.company()` no lo asigna (el endpoint
-    `OVERVIEW` no lo trae; probablemente haga falta
-    `EARNINGS_CALENDAR`). Mientras tanto, `NoUpcomingEarningsRule`
-    siempre pasa porque el dato es `None`.
+-   **`Company.next_earnings` no se puebla desde ningún provider
+    todavía.** El endpoint que lo daría, `EARNINGS_CALENDAR` de
+    Alpha Vantage, devuelve **CSV en vez de JSON**, a diferencia de
+    todo lo que usa el cliente HTTP actual (`AlphaVantageClient`) —
+    necesita ampliarse para soportar ambos formatos. Además, según
+    la IA que diseñó la arquitectura original, `next_earnings` no
+    debería vivir en `Company` (dato estable) sino en un modelo
+    separado tipo `MarketEvents`/`UpcomingEvents` (datos dinámicos:
+    earnings, dividendos, splits...). Pendiente de implementar; no
+    se ha tocado a ciegas sin poder validar el formato CSV real
+    contra la API.
 -   Queda 1 regla bloqueante por implementar de las 7 que define
     `constitution.yaml`: `IVRankFilter` — bloqueado por falta de
     histórico de IV fiable (ninguno de los 3 proveedores de datos da
-    IV Rank de forma consistente hoy, ver limitación más abajo).
+    IV Rank de forma consistente hoy, ver limitación más abajo). La
+    intención original era calcularlo internamente, persistiendo IV
+    diaria (~1 año) en Parquet o SQLite:
+    `(IV actual - IV mín) / (IV máx - IV mín)`. No implementado
+    todavía — requiere antes decidir dónde persistir el histórico y
+    acumular semanas/meses de datos antes de que el cálculo tenga
+    sentido.
 -   **Suscripción de opciones de IBKR contratada — error 10091
     resuelto, pero datos aún vacíos, causa pendiente de confirmar.**
     Se contrató el `US Equity and Options Add-On Streaming Bundle`
@@ -566,6 +596,7 @@ app/
         rejected_contract.py
     providers/
         alphavantage/
+        atlas/
         ibkr/
     rules/
         base.py
@@ -592,6 +623,10 @@ tests/
         test_dte_window.py
         test_closest_strikes.py
         test_alphavantage_mapper.py
+        atlas/
+            test_mapper.py
+            test_provider.py
+            test_thesis_mapper.py
     rules/
         test_delta_rule.py
         test_company_approved_rule.py
@@ -829,7 +864,13 @@ dar el cambio por terminado.
 ## Ejecutar el CLI contra datos reales
 
 Requiere IBKR (TWS/Gateway) corriendo en `127.0.0.1:7496` y una API key
-de Alpha Vantage configurada como variable de entorno.
+de Alpha Vantage configurada como variable de entorno. Opcionalmente,
+`GITHUB_TOKEN` (un Personal Access Token de solo lectura) para
+consultar ATLAS sin toparse con el rate-limit de 60 peticiones/hora
+sin autenticar de la API de GitHub — funciona sin él porque el repo es
+público, pero cualquier otro tráfico desde la misma IP puede agotarlo.
+`ATLAS_REPO` (por defecto `diegogh33/atlas-research`) permite apuntar
+a otro repo de análisis si hiciera falta.
 
 ``` bash
 uv run python -m app.main AAPL

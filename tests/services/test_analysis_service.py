@@ -4,8 +4,29 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.providers.alphavantage.mapper import UnknownCompanyError
+from app.providers.atlas.dto import AtlasEntry
 from app.services.analysis_service import AnalysisService
 from tests.conftest import build_company, build_option
+
+
+def _approved_atlas() -> AsyncMock:
+    """
+    An AtlasProvider mock that reports every ticker as approved
+    ("alcista"), matching the pre-ATLAS-integration test behavior
+    (thesis.approved was hardcoded to True) for tests that aren't
+    specifically exercising ATLAS's own approval logic.
+    """
+    atlas = AsyncMock()
+    atlas.get_entry.return_value = AtlasEntry(
+        ticker="SAP",
+        nombre="SAP",
+        valoracion="alcista",
+        resumen=None,
+        fecha=None,
+        zona_compra=None,
+        entrada_max=None,
+    )
+    return atlas
 
 
 @pytest.mark.asyncio
@@ -23,7 +44,11 @@ async def test_analyze_scores_and_ranks_eligible_contracts():
 
     ibkr = AsyncMock()
 
-    service = AnalysisService(alpha_provider=alpha, ibkr_provider=ibkr)
+    service = AnalysisService(
+        alpha_provider=alpha,
+        ibkr_provider=ibkr,
+        atlas_provider=_approved_atlas(),
+    )
     service.scanner.scan_puts = AsyncMock(
         return_value=[good_option, warning_option]
     )
@@ -47,7 +72,11 @@ async def test_analyze_rejects_contracts_with_delta_out_of_range():
 
     ibkr = AsyncMock()
 
-    service = AnalysisService(alpha_provider=alpha, ibkr_provider=ibkr)
+    service = AnalysisService(
+        alpha_provider=alpha,
+        ibkr_provider=ibkr,
+        atlas_provider=_approved_atlas(),
+    )
     service.scanner.scan_puts = AsyncMock(
         return_value=[good_option, bad_delta_option]
     )
@@ -77,7 +106,11 @@ async def test_analyze_rejects_contracts_with_upcoming_earnings():
 
     ibkr = AsyncMock()
 
-    service = AnalysisService(alpha_provider=alpha, ibkr_provider=ibkr)
+    service = AnalysisService(
+        alpha_provider=alpha,
+        ibkr_provider=ibkr,
+        atlas_provider=_approved_atlas(),
+    )
     service.scanner.scan_puts = AsyncMock(return_value=[option])
 
     result = await service.analyze("SAP")
@@ -102,7 +135,11 @@ async def test_analyze_tracks_contracts_without_underlying_price_as_rejected():
 
     ibkr = AsyncMock()
 
-    service = AnalysisService(alpha_provider=alpha, ibkr_provider=ibkr)
+    service = AnalysisService(
+        alpha_provider=alpha,
+        ibkr_provider=ibkr,
+        atlas_provider=_approved_atlas(),
+    )
     service.scanner.scan_puts = AsyncMock(return_value=[option])
 
     result = await service.analyze("SAP")
@@ -129,11 +166,89 @@ async def test_analyze_continues_with_options_when_company_is_unknown():
 
     ibkr = AsyncMock()
 
-    service = AnalysisService(alpha_provider=alpha, ibkr_provider=ibkr)
+    atlas = AsyncMock()
+    atlas.get_entry.return_value = AtlasEntry(
+        ticker="ITX",
+        nombre="Inditex",
+        valoracion="alcista",
+        resumen=None,
+        fecha=None,
+        zona_compra=None,
+        entrada_max=None,
+    )
+
+    service = AnalysisService(
+        alpha_provider=alpha, ibkr_provider=ibkr, atlas_provider=atlas
+    )
     service.scanner.scan_puts = AsyncMock(return_value=[option])
 
     result = await service.analyze("ITX", currency="EUR")
 
     assert result.company_known is False
     assert result.company.symbol == "ITX"
+    assert len(result.contracts) == 1
+
+
+@pytest.mark.asyncio
+async def test_analyze_rejects_contracts_when_company_not_approved_in_atlas():
+    """
+    A ticker with no ATLAS entry (never analyzed) or a "seguimiento"
+    (watchlist, not yet convinced) verdict should be rejected by
+    CompanyApprovedRule, even with an otherwise perfect option.
+    """
+    company = build_company(next_earnings=None)
+    option = build_option(delta=-0.20)
+
+    alpha = AsyncMock()
+    alpha.get_company.return_value = company
+
+    ibkr = AsyncMock()
+
+    atlas = AsyncMock()
+    atlas.get_entry.return_value = None  # never analyzed
+
+    service = AnalysisService(
+        alpha_provider=alpha, ibkr_provider=ibkr, atlas_provider=atlas
+    )
+    service.scanner.scan_puts = AsyncMock(return_value=[option])
+
+    result = await service.analyze("SAP")
+
+    assert result.contracts == []
+    assert len(result.rejected) == 1
+    assert result.rejected[0].reason == "COMPANY_APPROVED"
+
+
+@pytest.mark.asyncio
+async def test_analyze_accepts_contracts_when_atlas_verdict_is_posicion():
+    """
+    "posicion" (already holding a position, e.g. ARE in Diego's real
+    ATLAS library) should be treated as approved, same as "alcista".
+    """
+    company = build_company(next_earnings=None)
+    option = build_option(delta=-0.20)
+
+    alpha = AsyncMock()
+    alpha.get_company.return_value = company
+
+    ibkr = AsyncMock()
+
+    atlas = AsyncMock()
+    atlas.get_entry.return_value = AtlasEntry(
+        ticker="SAP",
+        nombre="SAP",
+        valoracion="posicion",
+        resumen=None,
+        fecha=None,
+        zona_compra=None,
+        entrada_max=None,
+    )
+
+    service = AnalysisService(
+        alpha_provider=alpha, ibkr_provider=ibkr, atlas_provider=atlas
+    )
+    service.scanner.scan_puts = AsyncMock(return_value=[option])
+
+    result = await service.analyze("SAP")
+
     assert len(result.contracts) == 1
