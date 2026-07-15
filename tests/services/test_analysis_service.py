@@ -190,11 +190,13 @@ async def test_analyze_continues_with_options_when_company_is_unknown():
 
 
 @pytest.mark.asyncio
-async def test_analyze_rejects_contracts_when_company_not_approved_in_atlas():
+async def test_analyze_surfaces_contracts_even_when_company_not_approved_in_atlas():
     """
-    A ticker with no ATLAS entry (never analyzed) or a "seguimiento"
-    (watchlist, not yet convinced) verdict should be rejected by
-    CompanyApprovedRule, even with an otherwise perfect option.
+    Regression test: a ticker with no ATLAS entry (never analyzed)
+    used to be rejected entirely by CompanyApprovedRule, producing an
+    empty results table with no way to see what the market looked
+    like. Now the contract still surfaces, just with a reduced score
+    and a recommendation that can't reach STRONG_BUY/BUY.
     """
     company = build_company(next_earnings=None)
     option = build_option(delta=-0.20)
@@ -214,9 +216,8 @@ async def test_analyze_rejects_contracts_when_company_not_approved_in_atlas():
 
     result = await service.analyze("SAP")
 
-    assert result.contracts == []
-    assert len(result.rejected) == 1
-    assert result.rejected[0].reason == "COMPANY_APPROVED"
+    assert len(result.contracts) == 1
+    assert result.rejected == []
 
 
 @pytest.mark.asyncio

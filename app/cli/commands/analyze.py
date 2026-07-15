@@ -85,6 +85,23 @@ async def _analyze(ticker: str, exchange: str, currency: str) -> None:
                 f"options analysis, which doesn't depend on this."
             )
 
+        thesis = result.thesis
+
+        if thesis.watchlist:
+            console.print(
+                f"\n[bold yellow]⚠ '{ticker}' is on the ATLAS watchlist "
+                f"(seguimiento) - not yet an approved investment.[/] "
+                f"Candidates below are shown, but scored lower and "
+                f"capped below STRONG_BUY/BUY."
+            )
+        elif not thesis.approved:
+            console.print(
+                f"\n[bold yellow]⚠ '{ticker}' has not been analyzed in "
+                f"ATLAS yet.[/] Candidates below are shown, but scored "
+                f"lower and capped below STRONG_BUY/BUY until it has a "
+                f"recorded investment thesis."
+            )
+
         options = Table(title="Best PUT Candidates")
 
         options.add_column("Score", justify="right")

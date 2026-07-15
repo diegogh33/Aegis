@@ -131,6 +131,7 @@ class AnalysisService:
 
         return AnalysisResult(
             company=company,
+            thesis=thesis,
             contracts=ranked,
             rejected=rejected,
             company_known=company_known,

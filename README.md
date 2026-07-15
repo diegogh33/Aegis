@@ -257,6 +257,36 @@ CLI / Dashboard
     ATLAS de "primero se aprueba la empresa, después se busca la
     mejor CSP". Un fichero de análisis mal formado no rompe la
     búsqueda del resto — se salta con un aviso.
+-   **`CompanyApprovedRule` ya no bloquea — deja pasar candidatos de
+    empresas sin aprobar, con score reducido y un aviso visible.**
+    Probando `DRAM` (ticker sin ninguna entrada en ATLAS): los 32
+    contratos fueron rechazados en bloque por
+    `COMPANY_APPROVED`, sin llegar a evaluarse el resto de la
+    Constitution — la tabla salía vacía sin ninguna información
+    útil sobre el mercado real, ni siquiera para explorar una idea
+    nueva. Confirmado que era el comportamiento deseado (bloqueante)
+    para empresas ya analizadas pero no convincentes, pero
+    demasiado agresivo para las que simplemente aún no se han
+    mirado. Ahora `CompanyApprovedRule` sigue el mismo patrón que
+    `DeltaRule` (bloquea solo en el caso más severo): `PASS`
+    (aprobada, score 10), `WARNING` (en watchlist/`seguimiento`,
+    score 4, no bloquea), `FAIL` (nunca analizada, score 0, **tampoco
+    bloquea** — a diferencia de otras reglas, aquí incluso el FAIL
+    deja pasar el candidato, solo que sin ese score). El CLI avisa
+    explícitamente cuando la empresa no está aprobada o está en
+    watchlist.
+-   **Bug real encontrado de paso: `STRONG_BUY`/`BUY` nunca eran
+    alcanzables, con o sin este cambio.** `EvaluationReport.
+    recommendation` comparaba `score` contra umbrales fijos (`>=90`
+    para `STRONG_BUY`, `>=75` para `BUY`), pero el máximo posible de
+    `score` (suma de las 6 reglas de Constitution, 10 puntos cada
+    una si `PASS`) es **60** — nunca pudo alcanzar 75 ni 90, para
+    ningún candidato, estuviera aprobado o no. Corregido: nuevo
+    `EvaluationReport.max_score` (calculado dinámicamente como
+    `nº de reglas × 10`, no una constante fija — sigue siendo
+    correcto si se añaden/quitan reglas, como IVR más adelante), y
+    `recommendation` ahora compara contra el 90%/75% de ese máximo
+    real, no contra un número absoluto.
 -   `config/constitution.yaml` ya contiene toda la configuración de
     reglas (delta, earnings, liquidez, spread, premium, pesos de
     scoring) — la configuración va por delante del código que la
@@ -655,6 +685,8 @@ app/
 
 tests/
     conftest.py
+    core/
+        test_evaluation_report.py
     engines/
         test_metrics_engine.py
         test_option_score_engine.py

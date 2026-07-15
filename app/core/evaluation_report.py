@@ -28,6 +28,18 @@ class EvaluationReport:
         )
 
     @property
+    def max_score(self) -> Decimal:
+        """
+        The maximum score this report could have if every rule
+        returned PASS. Each rule's own PASS score can differ (10 is
+        the common case today), so this is computed per report rather
+        than assumed as a fixed constant - it stays correct as rules
+        are added, removed, or given different PASS values.
+        """
+
+        return Decimal(len(self.results)) * Decimal("10")
+
+    @property
     def blockers(self) -> list[RuleResult]:
         return [
             result
@@ -37,14 +49,21 @@ class EvaluationReport:
 
     @property
     def recommendation(self) -> Recommendation:
+        """
+        STRONG_BUY/BUY thresholds are 90%/75% of max_score - not
+        fixed absolute values. Regression note: this used to compare
+        `score` (max 60 with the current 6 Constitution rules) against
+        fixed thresholds of 90/75, which made STRONG_BUY and BUY
+        mathematically unreachable for any candidate, approved or not.
+        """
 
         if not self.passed:
             return Recommendation.REJECT
 
-        if self.score >= Decimal("90"):
+        if self.score >= self.max_score * Decimal("0.90"):
             return Recommendation.STRONG_BUY
 
-        if self.score >= Decimal("75"):
+        if self.score >= self.max_score * Decimal("0.75"):
             return Recommendation.BUY
 
         return Recommendation.WATCH

@@ -90,6 +90,7 @@ def build_candidate(
     delta: Decimal | float | None = None,
     next_earnings: date | None = None,
     approved: bool = False,
+    watchlist: bool = False,
     dte: int = 45,
 ) -> InvestmentCandidate:
     """
@@ -97,6 +98,6 @@ def build_candidate(
     """
     return InvestmentCandidate(
         company=build_company(next_earnings=next_earnings),
-        thesis=InvestmentThesis(approved=approved),
+        thesis=InvestmentThesis(approved=approved, watchlist=watchlist),
         option=build_option(delta=delta, dte=dte),
     )
