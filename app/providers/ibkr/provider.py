@@ -9,6 +9,7 @@ from loguru import logger
 from app.config.settings import Settings
 from app.models.market_data import MarketData
 from app.models.option_contract import OptionContract
+from app.providers.ibkr.greeks_estimate import estimate_put_delta
 from app.providers.ibkr.mapper import IBKRMapper
 from app.providers.ibkr.market_data import MarketDataProvider
 
@@ -67,11 +68,48 @@ def _closest_strikes(
     """
     Returns up to `limit` contracts from `contracts`, ordered by how
     close their strike is to underlying_price (closest first).
+
+    Used only to find the ATM strike (limit=1) to fetch a reference
+    IV from - actual strike selection for scanning is by estimated
+    delta (_closest_to_target_delta), not by raw price proximity.
+    Price-proximity selection alone under-covers strikes far from the
+    underlying price when a stock has high IV (confirmed with DRAM,
+    IV ~95%: the delta range a CSP strategy targets falls much
+    further from the price than for a low-IV stock like ACN, IV
+    ~47%, at the same DTE).
     """
 
     return sorted(
         contracts,
         key=lambda c: abs(c.strike - underlying_price),
+    )[:limit]
+
+
+def _closest_to_target_delta(
+    contracts: list[OptionContract],
+    underlying_price: Decimal,
+    days_to_expiration: int,
+    reference_iv: Decimal,
+    target_delta: float,
+    limit: int,
+) -> list[OptionContract]:
+    """
+    Returns up to `limit` contracts, ordered by how close their
+    Black-Scholes-estimated delta (using a single reference IV, not
+    each strike's own smile-adjusted IV) is to target_delta.
+    """
+
+    return sorted(
+        contracts,
+        key=lambda c: abs(
+            estimate_put_delta(
+                underlying_price,
+                c.strike,
+                days_to_expiration,
+                reference_iv,
+            )
+            - target_delta
+        ),
     )[:limit]
 
 
@@ -249,6 +287,17 @@ class IBKRProvider:
             "scan", "strikes_per_expiration"
         )
 
+        # Delta objetivo de la Constitution (punto medio del rango
+        # preferido), usado para elegir qué strikes merece la pena
+        # pedir a IBKR - no el rango de aceptación final, que sigue
+        # aplicándose después con el delta real (DeltaRule).
+        delta_config = self._settings.get("cash_secured_put", "delta")
+
+        target_delta = (
+            delta_config["preferred"]["min"]
+            + delta_config["preferred"]["max"]
+        ) / 2
+
         # El precio del subyacente se pide una vez, antes de elegir
         # qué strikes traer por vencimiento - sin él no hay forma de
         # saber cuáles son los "cercanos".
@@ -288,19 +337,47 @@ class IBKRProvider:
 
                 expiration_contracts.append(option_contract)
 
-            if underlying_price is not None:
+            if underlying_price is None:
 
-                kept = min(strikes_per_expiration, len(expiration_contracts))
+                expiration_contracts = expiration_contracts[
+                    :strikes_per_expiration
+                ]
+
+                contracts.extend(expiration_contracts)
+                continue
+
+            days_to_expiration = (
+                datetime.strptime(expiration, "%Y%m%d").date()
+                - date.today()
+            ).days
+
+            # Se pide el strike ATM real para sacar su IV como
+            # referencia, y con ella se estima el delta de cada
+            # strike disponible antes de pedir datos de mercado para
+            # todos - solo tiene sentido gastar peticiones en los
+            # strikes que probablemente caigan cerca del delta
+            # objetivo, no en los N más cercanos al precio (que en
+            # subyacentes con IV alta, como DRAM ~95%, dejan fuera los
+            # strikes realmente relevantes).
+            atm_strike = _closest_strikes(
+                expiration_contracts, underlying_price, limit=1
+            )
+
+            reference_iv = None
+
+            if atm_strike:
+                atm_market = await self.get_market_data(atm_strike[0])
+                reference_iv = atm_market.implied_volatility
+
+            if reference_iv is None:
 
                 logger.debug(
-                    "{symbol} {expiration}: {total} strikes available, "
-                    "keeping the {kept} closest to underlying price "
-                    "{price}.",
+                    "{symbol} {expiration}: no reference IV available "
+                    "from the ATM strike; falling back to strikes "
+                    "closest to the underlying price instead of "
+                    "target delta.",
                     symbol=symbol,
                     expiration=expiration,
-                    total=len(expiration_contracts),
-                    kept=kept,
-                    price=underlying_price,
                 )
 
                 expiration_contracts = _closest_strikes(
@@ -311,9 +388,28 @@ class IBKRProvider:
 
             else:
 
-                expiration_contracts = expiration_contracts[
-                    :strikes_per_expiration
-                ]
+                logger.debug(
+                    "{symbol} {expiration}: {total} strikes available, "
+                    "keeping the {kept} closest to target delta "
+                    "{target} (reference IV {iv}).",
+                    symbol=symbol,
+                    expiration=expiration,
+                    total=len(expiration_contracts),
+                    kept=min(
+                        strikes_per_expiration, len(expiration_contracts)
+                    ),
+                    target=target_delta,
+                    iv=reference_iv,
+                )
+
+                expiration_contracts = _closest_to_target_delta(
+                    expiration_contracts,
+                    underlying_price,
+                    days_to_expiration,
+                    reference_iv,
+                    target_delta,
+                    strikes_per_expiration,
+                )
 
             contracts.extend(expiration_contracts)
 

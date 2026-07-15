@@ -10,8 +10,8 @@ scan:
   # mercado en vencimientos demasiado cortos (poca prima, casi no
   # merece la pena) por debajo de min.
   dte_window:
-    min: 20
-    max: 60
+    min: 25
+    max: 55
 
   # Cuántos strikes traer por cada vencimiento dentro de la ventana,
   # priorizando los más cercanos al precio actual del subyacente

@@ -476,21 +476,49 @@ CLI / Dashboard
     un bug: refleja la realidad de liquidez de opciones sobre
     Inditex ahora mismo, no un problema de Aegis.
 -   **Strikes seleccionados por cercanía al precio del subyacente
-    (`scan.strikes_per_expiration`, 8 por defecto), no arbitrariamente.**
-    Detectado probando SAN con el nuevo filtro de ventana de
-    vencimientos: `OptionScanner` tenía un corte global
-    `contracts[:10]` aplicado *después* de juntar los contratos de
-    varios vencimientos — con un vencimiento cercano aportando ya 10+
-    strikes, el corte se comía entero ese vencimiento y descartaba
-    los otros dos sin que el usuario llegara a verlos. Ahora el límite
-    se aplica por vencimiento, dentro de `IBKRProvider.get_put_contracts()`,
-    seleccionando los `strikes_per_expiration` más cercanos al precio
-    actual del subyacente (los relevantes para vender PUT con delta
-    objetivo) en vez de tomar los primeros N tal como llegan de IBKR.
-    El corte global `contracts[:10]` en `OptionScanner` se ha
-    eliminado por quedar redundante. Con subyacentes muy líquidos
-    (ej. MSFT, con decenas de strikes por vencimiento) este límite es
-    lo que evita disparar el número de peticiones de market data.
+    (`scan.strikes_per_expiration`, 8 por defecto), no arbitrariamente
+    — historia inicial, ver más abajo el cambio a selección por delta
+    objetivo que la sustituye.** Detectado probando SAN con el nuevo
+    filtro de ventana de vencimientos: `OptionScanner` tenía un corte
+    global `contracts[:10]` aplicado *después* de juntar los
+    contratos de varios vencimientos — con un vencimiento cercano
+    aportando ya 10+ strikes, el corte se comía entero ese
+    vencimiento y descartaba los otros dos sin que el usuario llegara
+    a verlos. El límite se aplica por vencimiento, dentro de
+    `IBKRProvider.get_put_contracts()`. El corte global
+    `contracts[:10]` en `OptionScanner` se eliminó por quedar
+    redundante.
+-   **Selección de strikes por delta estimado (Black-Scholes), no
+    por cercanía de precio — sustituye la selección anterior.**
+    Probando DRAM (IV ATM ~95%, muy superior al ~47% de ACN):
+    comparando contra la cadena real en TWS, ningún strike de los 8
+    más cercanos al precio (56.61) caía dentro del rango de delta
+    objetivo — los strikes que sí lo hacían (ej. 47, delta real
+    ≈-0.22) estaban ~17% OTM, muy fuera del rango de precio que
+    cubrían los 8 más cercanos. Con IV alta, el delta objetivo cae
+    en strikes proporcionalmente mucho más lejos del precio que con
+    IV baja — seleccionar por proximidad de precio pura los dejaba
+    fuera sistemáticamente. Ahora, por cada vencimiento,
+    `IBKRProvider` pide primero el strike ATM real para sacar su IV
+    como referencia (`estimate_put_delta()`, Black-Scholes con
+    `statistics.NormalDist` de la librería estándar — sin
+    dependencias nuevas), y con ella estima el delta de cada strike
+    disponible **antes** de pedir datos de mercado para todos,
+    quedándose con los `strikes_per_expiration` más cercanos al
+    delta objetivo (punto medio de `cash_secured_put.delta.
+    preferred`, `-0.20` con los valores por defecto) en vez de a la
+    distancia de precio. Es una estimación con una única IV de
+    referencia (no la IV específica de cada strike, que solo se
+    conoce tras pedir sus datos reales) — calibrada contra los
+    deltas reales observados en ACN y DRAM (dentro de ~0.03 de
+    diferencia), suficiente para elegir qué strikes vale la pena
+    pedir, no para sustituir el delta real que sigue viniendo de
+    IBKR y usándose en `DeltaRule`/scoring. Coste: una petición de
+    mercado adicional por vencimiento (el ATM real), antes de las
+    peticiones por lotes ya existentes.
+-   **Ventana de vencimientos (`scan.dte_window`) ajustada a 25-55
+    días (antes 20-60), y ventana de la Constitution
+    (`cash_secured_put.dte`) sigue en 30-45 sin cambios.**
 -   **El CLI ya no revienta si Alpha Vantage no reconoce el ticker
     (confirmado con ITX: `KeyError: 'Symbol'` sin control).**
     `AlphaVantageMapper.company()` accedía a `data["Symbol"]`
@@ -694,6 +722,7 @@ tests/
         test_market_data.py
         test_dte_window.py
         test_closest_strikes.py
+        test_greeks_estimate.py
         test_alphavantage_mapper.py
         atlas/
             test_mapper.py
