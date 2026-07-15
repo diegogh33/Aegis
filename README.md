@@ -540,6 +540,14 @@ CLI / Dashboard
     pequeños (`batch_size=6` por defecto, configurable), con cada
     lote esperando a completarse antes de lanzar el siguiente — más
     lento que antes, pero fiable.
+-   **Log de diagnóstico por strike (`OptionScanner.scan_puts()`),
+    mostrando strike/vencimiento/delta/IV/bid/ask de cada contrato
+    enriquecido.** Antes, para saber qué delta se había calculado
+    para un strike concreto había que inferirlo del único ejemplo
+    que muestra la tabla "Rejected Contracts" del CLI. Ahora cada
+    contrato deja un log `DEBUG` propio, permitiendo comparar
+    directamente los deltas calculados por Aegis contra la cadena
+    real (ej. en TWS) sin necesidad de instrumentación manual.
 
 ## Lo que NO funciona todavía / limitaciones conocidas
 

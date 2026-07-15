@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from dataclasses import replace
 
+from loguru import logger
+
 from app.models.market_data import MarketData
 from app.models.option_contract import OptionContract
 from app.providers.ibkr.provider import IBKRProvider
@@ -77,30 +79,42 @@ class OptionScanner:
                 else fallback_underlying_price
             )
 
-            enriched.append(
-                replace(
-                    contract,
+            enriched_contract = replace(
+                contract,
 
-                    # Underlying
-                    underlying_price=underlying_price,
+                # Underlying
+                underlying_price=underlying_price,
 
-                    # Prices
-                    bid=market.bid,
-                    ask=market.ask,
-                    last=market.last,
-                    mark=market.mark,
+                # Prices
+                bid=market.bid,
+                ask=market.ask,
+                last=market.last,
+                mark=market.mark,
 
-                    # Greeks
-                    delta=market.delta,
-                    gamma=market.gamma,
-                    theta=market.theta,
-                    vega=market.vega,
-                    implied_volatility=market.implied_volatility,
+                # Greeks
+                delta=market.delta,
+                gamma=market.gamma,
+                theta=market.theta,
+                vega=market.vega,
+                implied_volatility=market.implied_volatility,
 
-                    # Liquidity
-                    volume=market.volume,
-                    open_interest=market.open_interest,
-                )
+                # Liquidity
+                volume=market.volume,
+                open_interest=market.open_interest,
             )
+
+            logger.debug(
+                "{symbol} {expiration} strike={strike}: delta={delta}, "
+                "iv={iv}, bid={bid}, ask={ask}",
+                symbol=symbol,
+                expiration=enriched_contract.expiration,
+                strike=enriched_contract.strike,
+                delta=enriched_contract.delta,
+                iv=enriched_contract.implied_volatility,
+                bid=enriched_contract.bid,
+                ask=enriched_contract.ask,
+            )
+
+            enriched.append(enriched_contract)
 
         return enriched
