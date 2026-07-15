@@ -10,6 +10,31 @@ from app.providers.ibkr.mapper import IBKRMapper
 from app.providers.ibkr.market_data import MarketDataProvider
 
 
+def _as_single_contract(
+    qualified: Contract | list[Contract | None] | None,
+) -> Contract | None:
+    """
+    Normalizes one element of qualifyContractsAsync()'s result list
+    into a single Contract or None.
+
+    qualifyContractsAsync(*contracts) returns one entry per input
+    contract, but each entry's static type is
+    `Contract | list[Contract | None] | None` - the list case exists
+    in the library for ambiguous contracts that could expand into
+    several matches. For a well-formed Stock/Option request, that
+    never actually happens in practice, but this makes the assumption
+    explicit and mypy-verifiable instead of silently trusting it.
+    """
+
+    if isinstance(qualified, Contract):
+        return qualified
+
+    if isinstance(qualified, list):
+        return qualified[0] if qualified else None
+
+    return None
+
+
 class IBKRProvider:
     """
     Wrapper around the Interactive Brokers API.
@@ -60,10 +85,12 @@ class IBKRProvider:
 
         qualified = await self.ib.qualifyContractsAsync(stock)
 
-        if not qualified:
-            raise ValueError(f"Unable to qualify contract for {symbol}")
+        stock_contract = (
+            _as_single_contract(qualified[0]) if qualified else None
+        )
 
-        stock_contract = qualified[0]
+        if stock_contract is None:
+            raise ValueError(f"Unable to qualify contract for {symbol}")
 
         self._stock_contracts[symbol] = stock_contract
 
@@ -107,10 +134,12 @@ class IBKRProvider:
 
             qualified = await self.ib.qualifyContractsAsync(stock)
 
-            if not qualified:
-                return None
+            stock_contract = (
+                _as_single_contract(qualified[0]) if qualified else None
+            )
 
-            stock_contract = qualified[0]
+            if stock_contract is None:
+                return None
 
             self._stock_contracts[symbol] = stock_contract
 
@@ -140,6 +169,9 @@ class IBKRProvider:
             for detail in details:
 
                 contract = detail.contract
+
+                if contract is None:
+                    continue
 
                 option_contract = IBKRMapper.option_contract(contract)
 

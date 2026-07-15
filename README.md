@@ -318,6 +318,27 @@ CLI / Dashboard
     disponible en el constructor (usado en tests). Los valores por
     defecto no cambiaron — solo se volvieron editables desde el YAML
     sin tocar código.
+-   **`mypy app` en limpio: 0 errores (bajó de 20).** Se encontraron
+    5 ficheros de código muerto, nunca importados por nada del
+    proyecto, que generaban la mitad de los errores:
+    `app/providers/alphavantage/option_mapper.py` (mapper de opciones
+    de AlphaVantage que ni siquiera coincidía con el modelo real de
+    `OptionContract`), `app/selectors/option_selector.py` y
+    `app/selectors/base.py` (un selector de opciones "temporal" ya
+    reemplazado por `OptionScoreEngine`/`CashSecuredPutStrategy`),
+    `app/criteria/base.py` y `app/core/criterion_report.py` (otro
+    sistema de agregación de reglas en paralelo, nunca conectado a
+    nada). Los paquetes `app/selectors/` y `app/criteria/`, ya
+    vacíos, se eliminaron también. El resto de errores reales se
+    corrigieron: `EvaluationReport.score` podía devolver `int(0)` en
+    vez de `Decimal` cuando no había resultados (`sum()` sin `start`
+    explícito); faltaban stubs de tipos para `yaml`
+    (`types-PyYAML`, añadido a las dependencias de desarrollo); y
+    `IBKRProvider` asumía sin comprobar que
+    `qualifyContractsAsync()`/`ContractDetails.contract` siempre
+    devolvían un `Contract` válido — ahora se valida explícitamente
+    en runtime (`_as_single_contract()`), coincidiendo con lo que
+    los stubs de `ib_async` ya declaraban como posible.
 
 ## Lo que NO funciona todavía / limitaciones conocidas
 
@@ -335,13 +356,6 @@ CLI / Dashboard
     `constitution.yaml`: `IVRankFilter` — bloqueado por falta de
     histórico de IV fiable (ninguno de los 3 proveedores de datos da
     IV Rank de forma consistente hoy, ver limitación más abajo).
--   **`mypy app` reporta 20 errores** (subió ligeramente de 17 a 20:
-    el nuevo código de `get_underlying_price()` en
-    `providers/ibkr/provider.py` toca el mismo problema de tipos ya
-    documentado, `Contract | None` de `ib_async`). No bloquean la
-    ejecución del flujo actual pero indican inconsistencias de tipos
-    reales. Pendientes de una limpieza dedicada — requiere validación
-    contra IBKR real.
 -   **Suscripción de opciones de IBKR contratada — error 10091
     resuelto, pero datos aún vacíos, causa pendiente de confirmar.**
     Se contrató el `US Equity and Options Add-On Streaming Bundle`
@@ -382,7 +396,6 @@ app/
         rule_status.py
         rule_engine.py
         evaluation_report.py
-    criteria/
     engines/
         metrics_engine.py
         option_score_engine.py
@@ -408,7 +421,6 @@ app/
         spread.py
         company/
             company_approved_rule.py
-    selectors/
     services/
         option_scanner.py
         analysis_service.py
@@ -643,15 +655,17 @@ Debe devolver `All checks passed!`. Aegis no aplica todavía
 `ruff format` en CI/commits — el formato existente no es 100%
 consistente y se abordará en un commit dedicado más adelante.
 
-## Comprobación de tipos (informativa, no bloqueante todavía)
+## Comprobación de tipos
 
 ``` bash
 uv run mypy app
 ```
 
-A día de hoy reporta errores conocidos y documentados en "Estado
-actual". No es un gate de commit por ahora, pero es una buena señal de
-qué áreas del código necesitan más atención.
+Debe devolver `Success: no issues found in N source files`. Desde
+esta sesión de trabajo `mypy` está en limpio (0 errores) y puede
+tratarse como un check real, no solo informativo — si un cambio
+introduce un error de tipos nuevo, es una señal a atender antes de
+dar el cambio por terminado.
 
 ## Ejecutar el CLI contra datos reales
 
@@ -698,7 +712,8 @@ de dar un cambio por terminado.
         `constitution.yaml` igual que las demás reglas, en vez de
         tener umbrales hardcodeados.
 -   [ ] Construir `ConstitutionEngine` real conectado al flujo.
--   [ ] Resolver los errores de `mypy`.
+-   [x] Resolver los errores de `mypy` (0 errores, bajó de 20; incluyó
+        eliminar 5 ficheros de código muerto).
 -   [ ] Confirmar el comportamiento de datos de IBKR con el mercado
         US abierto (pendiente al cierre de esta sesión de trabajo).
 
@@ -742,6 +757,7 @@ Antes de considerar un cambio terminado:
 ``` bash
 uv run pytest
 uv run ruff check .
+uv run mypy app
 uv run python -m app.main AAPL   # validación manual en local, con IBKR corriendo
 ```
 

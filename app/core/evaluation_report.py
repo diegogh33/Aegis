@@ -23,8 +23,8 @@ class EvaluationReport:
     @property
     def score(self) -> Decimal:
         return sum(
-            result.score
-            for result in self.results
+            (result.score for result in self.results),
+            start=Decimal("0"),
         )
 
     @property
