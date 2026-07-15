@@ -114,6 +114,23 @@ class MarketDataProvider:
 
         greeks = ticker.modelGreeks
 
+        # modelGreeks (delta, gamma, theta, vega, IV) typically takes
+        # longer to populate than raw bid/ask/last, since it comes
+        # from IBKR's own model computation rather than a raw tick.
+        # _request_ticker() already confirmed there's a usable price
+        # by this point, so a short poll here is specifically for the
+        # Greeks catching up, not a full retry of the price fetch.
+        if _has_any_price(ticker) and greeks is None:
+
+            for _ in range(6):
+
+                await asyncio.sleep(0.5)
+
+                greeks = ticker.modelGreeks
+
+                if greeks is not None:
+                    break
+
         bid = _decimal_or_none(ticker.bid)
         ask = _decimal_or_none(ticker.ask)
         last = _decimal_or_none(ticker.last)
@@ -133,6 +150,12 @@ class MarketDataProvider:
                 "no recent trading activity.",
                 symbol=getattr(contract, "localSymbol", contract),
                 type=ticker.marketDataType,
+            )
+        elif greeks is None:
+            logger.debug(
+                "{symbol}: price available but no Greeks after polling "
+                "for up to 3 extra seconds.",
+                symbol=getattr(contract, "localSymbol", contract),
             )
 
         self.ib.cancelMktData(contract)

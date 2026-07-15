@@ -445,6 +445,25 @@ CLI / Dashboard
     contratos US que sí tienen suscripción real) atascada en modo
     delayed — `reqMarketDataType()` es de toda la conexión, no por
     petición individual.
+-   **Poll adicional específico para `modelGreeks`, pendiente de
+    confirmar en horario de mercado (añadido, no validado aún).**
+    Probando AAPL en horario US con la suscripción funcionando bien
+    (sin errores 10091/354), 24 de 32 contratos llegaron con precio
+    disponible pero **sin delta** ("Delta unavailable"). Según la
+    documentación de IBKR, los Greeks (delta/gamma/theta/vega) se
+    devuelven automáticamente tras `reqMktData()` para opciones, sin
+    necesitar un `genericTickList` especial — pero el cálculo del
+    modelo tarda más en poblarse que bid/ask/last crudos, y
+    `_request_ticker()` devolvía el ticker en cuanto había *precio*,
+    sin esperar a que también llegaran los Greeks. `MarketDataProvider.get()`
+    ahora, si hay precio pero `modelGreeks` sigue `None`, hace un
+    poll corto (hasta 3 segundos extra, en pasos de 0.5s) antes de
+    rendirse — evita alargar la espera para contratos que ya
+    llegan completos, mientras da margen real a los que tardan más.
+    **No se ha podido validar el efecto real de este cambio en esta
+    sesión** (requiere otra ejecución contra IBKR en horario de
+    mercado); si sigue faltando delta en la próxima prueba, el poll
+    no fue la causa real y hará falta seguir investigando.
 
 ## Lo que NO funciona todavía / limitaciones conocidas
 
