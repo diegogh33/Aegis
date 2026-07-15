@@ -3,6 +3,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from ib_async import Contract, IB, Option, Stock
+from loguru import logger
 
 from app.models.market_data import MarketData
 from app.models.option_contract import OptionContract
@@ -112,6 +113,17 @@ class IBKRProvider:
         chain = next(
             (c for c in chains if c.exchange == "SMART"),
             chains[0],
+        )
+
+        expirations = sorted(chain.expirations)
+
+        logger.debug(
+            "{symbol}: {count} expirations available on {exchange}: "
+            "{expirations}",
+            symbol=symbol,
+            count=len(expirations),
+            exchange=chain.exchange,
+            expirations=", ".join(expirations),
         )
 
         return {
