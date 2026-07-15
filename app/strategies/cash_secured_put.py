@@ -1,3 +1,4 @@
+from app.rules.company.company_approved_rule import CompanyApprovedRule
 from app.rules.no_earnings import NoUpcomingEarningsRule
 from app.strategies.base import Strategy
 
@@ -10,6 +11,7 @@ class CashSecuredPutStrategy(Strategy):
     def __init__(self):
         super().__init__(
             rules=[
+                CompanyApprovedRule(),
                 NoUpcomingEarningsRule(),
             ]
         )

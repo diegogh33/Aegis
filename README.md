@@ -200,7 +200,7 @@ CLI / Dashboard
 
 -   Estructura de paquetes Python correcta (todos los subpaquetes de
     `app/` tienen su `__init__.py`).
--   Suite de tests ejecutable: `uv run pytest` pasa en limpio.
+-   Suite de tests ejecutable: `uv run pytest` pasa en limpio (11 tests).
 -   Linting limpio: `uv run ruff check .` sin avisos.
 -   Flujo de scoring (sin Constitution todavía) operativo de extremo a
     extremo:
@@ -210,19 +210,38 @@ CLI / Dashboard
     reglas (delta, earnings, liquidez, spread, premium, pesos de
     scoring) — la configuración va por delante del código que la
     consume.
+-   **Sistema de reglas unificado.** Existía un segundo sistema de
+    reglas en paralelo (`BaseRule`/`HardFilterEngine`), incompatible
+    con el usado por `RuleEngine`/`Strategy`. Se ha eliminado y todo
+    vive ahora sobre una única interfaz: `Rule` (`app/rules/base.py`)
+    + `RuleResult`/`RuleStatus` (`app/core/`).
+-   `CashSecuredPutStrategy` ya evalúa dos reglas bloqueantes reales a
+    través de `RuleEngine`:
+    -   `CompanyApprovedRule` — lee `InvestmentThesis.approved` (ya
+        no es un placeholder que siempre pasa).
+    -   `NoUpcomingEarningsRule` — descarta si hay earnings dentro del
+        `minimum_days` configurado (tenía un bug de construcción de
+        `RuleResult` con argumentos posicionales incorrectos, ya
+        corregido).
+-   `tests/conftest.py` centraliza los builders de `Company`,
+    `OptionContract` e `InvestmentCandidate` para tests — evita
+    duplicar fixtures en cada fichero de test.
 
 ## Lo que NO funciona todavía / limitaciones conocidas
 
--   **No existe un `ConstitutionEngine` unificado.** Hoy el
-    `AnalysisService` no aplica ningún filtro duro antes de puntuar:
-    todo lo que llega de IBKR con datos de mercado pasa directamente
-    al `OptionScoreEngine`.
--   **Hay dos sistemas de reglas incompatibles conviviendo en el
-    código** (`app/rules/base.py` + `app/core/result.py` por un lado,
-    `app/rules/base_rule.py` + `app/models/rule_result.py` por otro),
-    con firmas de `evaluate()` distintas. Antes de construir el
-    `ConstitutionEngine` real hay que unificarlos. Esto está
-    planificado como próximo commit, no incluido en este.
+-   **`CashSecuredPutStrategy` no está conectada a `AnalysisService`
+    ni al CLI todavía.** Existe y tiene tests, pero el flujo real
+    (`uv run python -m app.main AAPL`) sigue sin aplicar ningún filtro
+    duro antes de puntuar: todo lo que llega de IBKR pasa directamente
+    al `OptionScoreEngine`. Conectar ambos es el siguiente paso hacia
+    el `ConstitutionEngine` real descrito más arriba.
+-   Solo hay 2 reglas bloqueantes implementadas
+    (`CompanyApprovedRule`, `NoUpcomingEarningsRule`) de las 7 que
+    define `constitution.yaml`. Faltan `DeltaFilter` (existe
+    `DeltaRule` con scoring, pero no como filtro duro), `DTEFilter`,
+    `IVRankFilter`, `LiquidityFilter` como regla bloqueante (hoy es un
+    servicio aparte, `app/services/liquidity_filter.py`), y filtro de
+    spread.
 -   **`mypy app` reporta ~31 errores** repartidos entre
     `option_score_engine.py`, `option_selector.py`,
     `providers/ibkr/provider.py` y otros. No bloquean la ejecución del
@@ -232,10 +251,6 @@ CLI / Dashboard
 -   **IBKR con datos delayed** (`reqMarketDataType(3)` en el histórico
     de pruebas manuales) — los Greeks e IV pueden no ser en tiempo
     real según el tipo de suscripción de market data usada.
--   Pendiente de implementar: `ConstitutionEngine`,
-    `CompanyRulesEngine` (unificado), `EarningsFilter`,
-    `IVRankFilter`, `DeltaFilter`/`DTEFilter` como filtros duros
-    conectados al flujo, `PositionSizing`, `PortfolioRules`.
 
 ------------------------------------------------------------------------
 
@@ -285,8 +300,13 @@ app/
     utils/
 
 tests/
+    conftest.py
     rules/
         test_delta_rule.py
+        test_company_approved_rule.py
+        test_no_earnings_rule.py
+    strategies/
+        test_cash_secured_put.py
 ```
 
 ------------------------------------------------------------------------
@@ -529,7 +549,10 @@ de dar un cambio por terminado.
 -   [x] Suite de tests ejecutable y en verde.
 -   [x] Eliminar scripts de prueba manual mezclados con tests
         automatizados.
--   [ ] Unificar los dos sistemas de reglas en uno solo.
+-   [x] Unificar los dos sistemas de reglas en uno solo.
+-   [ ] Conectar `CashSecuredPutStrategy` a `AnalysisService`/CLI.
+-   [ ] Implementar las reglas de Constitution que faltan (DTE, IVR,
+        liquidez como filtro duro, spread).
 -   [ ] Construir `ConstitutionEngine` real conectado al flujo.
 -   [ ] Resolver los errores de `mypy`.
 -   [ ] Estabilizar IBKR (incluyendo el tema de datos delayed).
