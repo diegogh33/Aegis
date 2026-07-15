@@ -42,3 +42,17 @@ def test_upcoming_earnings_should_be_rejected_even_if_approved():
 
     assert report.passed is False
     assert report.recommendation is Recommendation.REJECT
+
+
+def test_dte_outside_range_should_be_rejected_even_if_approved():
+    candidate = build_candidate(
+        delta=-0.20,
+        approved=True,
+        next_earnings=date.today() + timedelta(days=30),
+        dte=5,
+    )
+
+    report = CashSecuredPutStrategy().evaluate(candidate)
+
+    assert report.passed is False
+    assert report.recommendation is Recommendation.REJECT

@@ -56,6 +56,7 @@ def build_company(
 def build_option(
     delta: Decimal | float | None = None,
     underlying: str = "SAP",
+    dte: int = 45,
 ) -> OptionContract:
     """
     Builds a minimal but fully-populated OptionContract for tests.
@@ -65,7 +66,7 @@ def build_option(
         local_symbol=underlying,
         con_id=1,
         option_type="PUT",
-        expiration=date.today() + timedelta(days=45),
+        expiration=date.today() + timedelta(days=dte),
         strike=Decimal("250"),
         exchange="SMART",
         currency="USD",
@@ -89,6 +90,7 @@ def build_candidate(
     delta: Decimal | float | None = None,
     next_earnings: date | None = None,
     approved: bool = False,
+    dte: int = 45,
 ) -> InvestmentCandidate:
     """
     Builds a minimal but fully-populated InvestmentCandidate for tests.
@@ -96,5 +98,5 @@ def build_candidate(
     return InvestmentCandidate(
         company=build_company(next_earnings=next_earnings),
         thesis=InvestmentThesis(approved=approved),
-        option=build_option(delta=delta),
+        option=build_option(delta=delta, dte=dte),
     )

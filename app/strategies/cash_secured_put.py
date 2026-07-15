@@ -1,4 +1,5 @@
 from app.rules.company.company_approved_rule import CompanyApprovedRule
+from app.rules.dte import DTERule
 from app.rules.no_earnings import NoUpcomingEarningsRule
 from app.strategies.base import Strategy
 
@@ -13,5 +14,6 @@ class CashSecuredPutStrategy(Strategy):
             rules=[
                 CompanyApprovedRule(),
                 NoUpcomingEarningsRule(),
+                DTERule(),
             ]
         )

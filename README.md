@@ -271,6 +271,14 @@ CLI / Dashboard
     de sus opciones) una sola vez por análisis, y `OptionScanner` lo
     usa como valor de respaldo cuando el de la opción individual
     viene vacío.
+-   **`DTERule` — tercera regla bloqueante de la Constitution.**
+    Descarta contratos cuyo DTE (días hasta vencimiento) caiga fuera
+    del rango `cash_secured_put.dte.min`/`max` de
+    `config/constitution.yaml` (30–45 por defecto). A diferencia de
+    `DeltaRule`/`NoUpcomingEarningsRule`, `DTERule` sí lee sus
+    umbrales de `constitution.yaml` a través de `Settings` en vez de
+    tenerlos hardcodeados — ver nota en limitaciones sobre esta
+    inconsistencia.
 
 ## Lo que NO funciona todavía / limitaciones conocidas
 
@@ -284,13 +292,22 @@ CLI / Dashboard
     `OVERVIEW` no lo trae; probablemente haga falta
     `EARNINGS_CALENDAR`). Mientras tanto, `NoUpcomingEarningsRule`
     siempre pasa porque el dato es `None`.
--   Solo hay 2 reglas bloqueantes implementadas
-    (`CompanyApprovedRule`, `NoUpcomingEarningsRule`) de las 7 que
-    define `constitution.yaml`. Faltan `DeltaFilter` (existe
-    `DeltaRule` con scoring, pero no como filtro duro), `DTEFilter`,
-    `IVRankFilter`, `LiquidityFilter` como regla bloqueante (hoy es un
-    servicio aparte, `app/services/liquidity_filter.py`), y filtro de
-    spread.
+-   **Inconsistencia: no todas las reglas leen `constitution.yaml`.**
+    `DTERule` sí lee sus umbrales del YAML vía `Settings` (el
+    principio "Configuration First" del proyecto), pero `DeltaRule` y
+    `NoUpcomingEarningsRule` los tienen hardcodeados en su
+    constructor, duplicando valores que ya existen en
+    `constitution.yaml` (`delta.preferred`/`delta.warning`,
+    `earnings.minimum_days`). Cambiar sus umbrales hoy requiere tocar
+    código, no solo el YAML. Pendiente de unificar en un commit
+    dedicado.
+-   Quedan 3 reglas bloqueantes por implementar de las 7 que define
+    `constitution.yaml`: `DeltaFilter` (existe `DeltaRule` con
+    scoring, pero no como filtro duro), `IVRankFilter` (bloqueado por
+    falta de histórico de IV fiable — ver limitación de datos más
+    abajo), `LiquidityFilter` como regla bloqueante (hoy es un
+    servicio aparte, `app/services/liquidity_filter.py`, fuera del
+    `RuleEngine`), y filtro de spread.
 -   **`mypy app` reporta 20 errores** (subió ligeramente de 17 a 20:
     el nuevo código de `get_underlying_price()` en
     `providers/ibkr/provider.py` toca el mismo problema de tipos ya
@@ -380,6 +397,7 @@ tests/
         test_delta_rule.py
         test_company_approved_rule.py
         test_no_earnings_rule.py
+        test_dte_rule.py
     services/
         test_analysis_service.py
         test_liquidity_filter.py
@@ -636,11 +654,17 @@ de dar un cambio por terminado.
         `InvestmentThesis.approved` (hoy hardcodeado a `True`).
 -   [ ] Poblar `Company.next_earnings` desde un provider real (hoy
         siempre `None`).
--   [ ] Implementar las reglas de Constitution que faltan (DTE, IVR,
-        liquidez como filtro duro, spread).
+-   [x] `DTERule` implementada y conectada (lee de
+        `constitution.yaml`).
+-   [ ] Implementar las reglas de Constitution que faltan (Delta como
+        filtro duro, IVR, liquidez como filtro duro, spread).
+-   [ ] Unificar `DeltaRule`/`NoUpcomingEarningsRule` para que lean
+        `constitution.yaml` igual que `DTERule`, en vez de tener
+        umbrales hardcodeados.
 -   [ ] Construir `ConstitutionEngine` real conectado al flujo.
 -   [ ] Resolver los errores de `mypy`.
--   [ ] Estabilizar IBKR (incluyendo el tema de datos delayed).
+-   [ ] Confirmar el comportamiento de datos de IBKR con el mercado
+        US abierto (pendiente al cierre de esta sesión de trabajo).
 
 ## Fase 2
 

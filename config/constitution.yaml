@@ -15,6 +15,11 @@ cash_secured_put:
 
     minimum_days: 14
 
+  dte:
+
+    min: 30
+    max: 45
+
   liquidity:
 
     minimum_open_interest: 500
