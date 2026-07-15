@@ -7,6 +7,7 @@ from app.models.company import Company
 from app.models.investment_candidate import InvestmentCandidate
 from app.models.rejected_contract import RejectedContract
 from app.models.scored_option import ScoredOption
+from app.providers.alphavantage.client import AlphaVantageUnavailableError
 from app.providers.alphavantage.mapper import UnknownCompanyError
 from app.providers.alphavantage.provider import AlphaVantageProvider
 from app.providers.atlas.provider import AtlasProvider
@@ -43,6 +44,7 @@ class AnalysisService:
     ) -> AnalysisResult:
 
         company_known = True
+        company_error: str | None = None
 
         try:
             company = await self.alpha.get_company(ticker)
@@ -55,6 +57,20 @@ class AnalysisService:
             # rather than fail the whole run.
             company = Company.unknown(ticker)
             company_known = False
+            company_error = (
+                f"Alpha Vantage doesn't recognize '{ticker}' - no "
+                f"fundamental data available. For non-US tickers this "
+                f"often means a market suffix is needed (e.g. 'ITX.MC')."
+            )
+        except AlphaVantageUnavailableError as error:
+            # The API itself is unavailable right now (most commonly
+            # a rate limit, e.g. the free tier's 25 requests/day cap)
+            # rather than the ticker being unrecognized. Same
+            # fallback as above: fundamental data is unavailable, but
+            # options analysis doesn't depend on it.
+            company = Company.unknown(ticker)
+            company_known = False
+            company_error = f"Alpha Vantage is unavailable: {error}"
 
         # The investment thesis only depends on the ticker, not on
         # any individual contract, so it's looked up once per
@@ -135,4 +151,5 @@ class AnalysisService:
             contracts=ranked,
             rejected=rejected,
             company_known=company_known,
+            company_error=company_error,
         )

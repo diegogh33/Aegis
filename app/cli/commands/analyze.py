@@ -78,11 +78,9 @@ async def _analyze(ticker: str, exchange: str, currency: str) -> None:
         else:
 
             console.print(
-                f"\n[bold yellow]⚠ Alpha Vantage doesn't recognize "
-                f"'{ticker}' - no fundamental data available.[/] "
-                f"For non-US tickers this often means a market suffix "
-                f"is needed (e.g. 'ITX.MC'). Continuing with the "
-                f"options analysis, which doesn't depend on this."
+                f"\n[bold yellow]⚠ {result.company_error}[/] "
+                f"Continuing with the options analysis, which doesn't "
+                f"depend on this."
             )
 
         thesis = result.thesis

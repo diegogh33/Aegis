@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from app.providers.alphavantage.client import AlphaVantageUnavailableError
 from app.providers.alphavantage.mapper import UnknownCompanyError
 from app.providers.atlas.dto import AtlasEntry
 from app.services.analysis_service import AnalysisService
@@ -187,6 +188,50 @@ async def test_analyze_continues_with_options_when_company_is_unknown():
     assert result.company_known is False
     assert result.company.symbol == "ITX"
     assert len(result.contracts) == 1
+    assert "doesn't recognize" in result.company_error
+
+
+@pytest.mark.asyncio
+async def test_analyze_continues_with_options_when_alphavantage_is_rate_limited():
+    """
+    Regression test: Alpha Vantage's free tier returns a 25
+    requests/day cap as an "Information" field, which the client
+    turned into a bare RuntimeError - not caught by AnalysisService
+    (which only handled UnknownCompanyError), so it crashed the whole
+    run instead of continuing with the independent options analysis,
+    exactly like the unknown-ticker case already handled.
+    """
+    option = build_option(delta=-0.20)
+
+    alpha = AsyncMock()
+    alpha.get_company.side_effect = AlphaVantageUnavailableError(
+        "We have detected your API key as XXXX and our standard API "
+        "rate limit is 25 requests per day."
+    )
+
+    ibkr = AsyncMock()
+
+    atlas = AsyncMock()
+    atlas.get_entry.return_value = AtlasEntry(
+        ticker="AAPL",
+        nombre="Apple",
+        valoracion="alcista",
+        resumen=None,
+        fecha=None,
+        zona_compra=None,
+        entrada_max=None,
+    )
+
+    service = AnalysisService(
+        alpha_provider=alpha, ibkr_provider=ibkr, atlas_provider=atlas
+    )
+    service.scanner.scan_puts = AsyncMock(return_value=[option])
+
+    result = await service.analyze("AAPL")
+
+    assert result.company_known is False
+    assert len(result.contracts) == 1
+    assert "unavailable" in result.company_error.lower()
 
 
 @pytest.mark.asyncio

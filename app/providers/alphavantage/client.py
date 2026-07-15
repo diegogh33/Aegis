@@ -8,6 +8,19 @@ from app.config.settings import settings
 from app.providers.alphavantage.endpoints import OVERVIEW
 
 
+class AlphaVantageUnavailableError(Exception):
+    """
+    Raised when Alpha Vantage's API itself signals a problem not
+    specific to the requested ticker - most commonly a rate limit
+    ("Information" field, e.g. the free tier's 25 requests/day cap),
+    but also covers other explicit "Error Message" responses. Distinct
+    from UnknownCompanyError (mapper.py), which means the ticker
+    itself isn't recognized rather than the API being unavailable -
+    callers may want to handle "try again later" differently from
+    "this ticker needs a different symbol format".
+    """
+
+
 class AlphaVantageClient:
     """
     Minimal Alpha Vantage HTTP client.
@@ -41,10 +54,10 @@ class AlphaVantageClient:
         data = response.json()
 
         if "Information" in data:
-            raise RuntimeError(data["Information"])
+            raise AlphaVantageUnavailableError(data["Information"])
 
         if "Error Message" in data:
-            raise RuntimeError(data["Error Message"])
+            raise AlphaVantageUnavailableError(data["Error Message"])
 
         return data
 

@@ -533,6 +533,25 @@ CLI / Dashboard
     resultado; el CLI se salta la tabla "Company" y muestra un aviso
     explícito en su lugar, mientras la tabla de opciones sigue
     funcionando con normalidad.
+-   **El CLI tampoco revienta si Alpha Vantage devuelve un rate-limit
+    (confirmado en real: plan gratuito, 25 peticiones/día).**
+    Distinto del caso anterior — aquí el ticker sí es válido, pero
+    la API devuelve un campo `"Information"` con el aviso de límite,
+    que el cliente convertía en un `RuntimeError` genérico, sin
+    capturar en ningún sitio, así que tumbaba el análisis igual que
+    antes del fix de `UnknownCompanyError`. Nueva excepción
+    `AlphaVantageUnavailableError` (distinta de
+    `UnknownCompanyError`: aquí el problema es la API, no el
+    ticker), capturada de la misma forma en `AnalysisService` —
+    continúa con las opciones, `company_known=False`. `AnalysisResult`
+    ganó `company_error: str | None` con el mensaje real devuelto
+    por Alpha Vantage (antes el CLI mostraba un texto fijo pensado
+    solo para el caso de ticker no reconocido, que no encajaba con
+    un rate-limit). **Nota:** el plan gratuito de Alpha Vantage
+    permite solo 25 peticiones al día — con varias pruebas seguidas
+    en una sesión de trabajo (como esta) es fácil agotarlo; no hay
+    forma de evitarlo sin plan de pago, pero al menos ya no bloquea
+    el resto del análisis.
 -   **Fallback automático a datos delayed cuando no hay suscripción
     en tiempo real para un mercado concreto.** Confirmado probando
     ITX en MEFFRV: `Error 354 - Requested market data is not
