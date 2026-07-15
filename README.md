@@ -509,24 +509,37 @@ CLI / Dashboard
     pasaron a tener motivos de mercado real (delta fuera de rango,
     spread ancho, poco volumen) en vez de "sin datos".
 -   **Fallback a `bidGreeks`/`askGreeks` cuando `modelGreeks` no
-    converge, ni siquiera con el poll.** Probando ACN (mismo mercado
-    US, misma suscripción, sin errores de datos), todos los
+    converge, ni siquiera con el poll.** Probando ACN, algunos
     contratos evaluados llegaban con precio disponible pero sin
-    Greeks — a diferencia de AAPL, donde el poll ya resolvía el
-    caso. Diferencia observada: los strikes de ACN sin Greeks
-    incluían opciones bastante alejadas del precio (~14% OTM), donde
-    el modelo de IBKR aparentemente no siempre converge, sea cual
-    sea el tiempo de espera — no es un problema de timing sino de
-    falta de confianza del modelo en strikes menos líquidos.
-    `MarketDataProvider.get()` ahora, si `modelGreeks` sigue `None`
-    tras el poll, cae a `bidGreeks` y después a `askGreeks`
+    Greeks. `MarketDataProvider.get()` ahora, si `modelGreeks` sigue
+    `None` tras el poll, cae a `bidGreeks` y después a `askGreeks`
     (`_select_greeks()`) — calculados directamente sobre el precio
     cotizado de bid/ask en vez del precio "justo" del modelo, así
     que pueden diferir ligeramente (más con spread ancho), pero un
     delta aproximado es más útil que ninguno para un strike que sí
     tiene cotización real. Queda registrado en el log de diagnóstico
-    cuándo el delta viene del modelo vs. de este fallback, para
-    poder distinguirlo si hace falta.
+    cuándo el delta viene del modelo vs. de este fallback. **Nota:**
+    la hipótesis inicial (strikes OTM con menor liquidez, sin
+    relación con el problema real de abajo) resultó estar
+    equivocada — ver la entrada siguiente.
+-   **Peticiones de datos de mercado en lotes, no todas a la vez —
+    corrige la causa real de los Greeks ausentes en ACN.**
+    Comparando los resultados de Aegis con la cadena real de opciones
+    de ACN en TWS (captura de pantalla del usuario): strikes con
+    volumen y cotización normales (ej. 120, 125, 140 PUT del
+    vencimiento de 37 días) aparecían en Aegis como "sin Greeks", sin
+    ninguna razón de mercado real que lo explicara — la hipótesis
+    original de "menor liquidez en strikes OTM" no encajaba con la
+    evidencia. Causa real: `OptionScanner.scan_puts()` lanzaba
+    **todas** las peticiones de market data a la vez con un único
+    `asyncio.gather()` (32 contratos para ACN: 8 strikes × 4
+    vencimientos) — por encima del límite documentado de IBKR de 50
+    mensajes/segundo por cliente de API, lo que puede saturar la
+    conexión y dejar suscripciones sin datos aunque el mercado real
+    tenga liquidez normal. Ahora las peticiones se agrupan en lotes
+    pequeños (`batch_size=6` por defecto, configurable), con cada
+    lote esperando a completarse antes de lanzar el siguiente — más
+    lento que antes, pero fiable.
 
 ## Lo que NO funciona todavía / limitaciones conocidas
 

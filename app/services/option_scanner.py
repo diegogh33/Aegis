@@ -31,6 +31,7 @@ class OptionScanner:
         symbol: str,
         exchange: str = "SMART",
         currency: str = "USD",
+        batch_size: int = 6,
     ) -> list[OptionContract]:
 
         contracts = await self.provider.get_put_contracts(
@@ -47,12 +48,24 @@ class OptionScanner:
             symbol, exchange=exchange, currency=currency
         )
 
-        tasks = [
-            self.provider.get_market_data(contract)
-            for contract in contracts
-        ]
+        # Se piden en lotes pequeños en vez de todos a la vez.
+        # Confirmado con ACN (32 contratos): pedirlos todos con
+        # asyncio.gather() puede saturar el límite de IBKR de 50
+        # mensajes/segundo, dejando un vencimiento entero sin Greeks
+        # aunque el mercado real tenga liquidez normal - no era falta
+        # de datos, era la propia petición saturando la conexión.
+        markets: list[MarketData] = []
 
-        markets: list[MarketData] = await asyncio.gather(*tasks)
+        for i in range(0, len(contracts), batch_size):
+
+            batch = contracts[i : i + batch_size]
+
+            tasks = [
+                self.provider.get_market_data(contract)
+                for contract in batch
+            ]
+
+            markets.extend(await asyncio.gather(*tasks))
 
         enriched: list[OptionContract] = []
 

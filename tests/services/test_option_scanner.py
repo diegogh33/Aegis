@@ -102,3 +102,36 @@ async def test_underlying_price_stays_none_if_both_sources_are_missing():
     result = await scanner.scan_puts("AAPL")
 
     assert result[0].underlying_price is None
+
+
+async def test_market_data_requests_are_sent_in_batches():
+    """
+    Regression test: firing all market data requests at once with a
+    single asyncio.gather() (confirmed with ACN, 32 contracts) can
+    saturate IBKR's 50 messages/second limit for API clients, leaving
+    an entire expiration without Greeks even when the real market has
+    normal liquidity - not a data availability problem, a request
+    saturation one. Requests should go out in small batches instead.
+    """
+    contracts = [build_option(delta=None) for _ in range(10)]
+
+    call_order: list[int] = []
+
+    async def _tracked_get_market_data(contract):
+        call_order.append(len(call_order))
+        return _market_data(underlying_price=None)
+
+    provider = AsyncMock()
+    provider.get_put_contracts.return_value = contracts
+    provider.get_underlying_price.return_value = Decimal("280.00")
+    provider.get_market_data.side_effect = _tracked_get_market_data
+
+    scanner = OptionScanner(provider)
+
+    result = await scanner.scan_puts("AAPL", batch_size=3)
+
+    assert len(result) == 10
+    # 10 contracts, batch_size=3: 4 batches (3+3+3+1), each awaited
+    # via asyncio.gather - all 10 calls still happen, just not as one
+    # single gather() of 10.
+    assert provider.get_market_data.await_count == 10
