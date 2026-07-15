@@ -90,3 +90,26 @@ class MarketDataProvider:
             ),
             open_interest=None,
         )
+
+    async def get_stock_price(self, contract) -> Decimal | None:
+        """
+        Fetches the current market price for the underlying (stock)
+        contract itself, independent of any option's market data.
+
+        This exists because option contracts on accounts without an
+        options market data subscription (IBKR error 10091) never
+        receive a usable underlying_price via their own ticker - but
+        the stock itself usually has real market data available. This
+        lets AnalysisService price contracts even when their own
+        underlying_price came back empty.
+        """
+
+        ticker: Ticker = self.ib.reqMktData(contract)
+
+        await asyncio.sleep(2)
+
+        price = _decimal_or_none(ticker.marketPrice())
+
+        self.ib.cancelMktData(contract)
+
+        return price

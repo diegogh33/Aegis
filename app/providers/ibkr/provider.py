@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 from ib_async import Contract, IB, Option, Stock
 
 from app.models.market_data import MarketData
@@ -29,6 +31,7 @@ class IBKRProvider:
         self.market_data = MarketDataProvider(self.ib)
 
         self._contracts: dict[int, Contract] = {}
+        self._stock_contracts: dict[str, Contract] = {}
 
     async def connect(self) -> None:
 
@@ -60,6 +63,8 @@ class IBKRProvider:
 
         stock_contract = qualified[0]
 
+        self._stock_contracts[symbol] = stock_contract
+
         chains = await self.ib.reqSecDefOptParamsAsync(
             stock_contract.symbol,
             "",
@@ -81,6 +86,33 @@ class IBKRProvider:
             "expirations": sorted(chain.expirations),
             "strikes": sorted(chain.strikes),
         }
+
+    async def get_underlying_price(self, symbol: str) -> Decimal | None:
+        """
+        Returns the current market price of the underlying stock,
+        independent of any option contract's own market data.
+
+        Requires get_option_chain(symbol) to have been called first
+        for this symbol (it qualifies and caches the stock contract).
+        Falls back to a fresh qualification if that hasn't happened.
+        """
+
+        stock_contract = self._stock_contracts.get(symbol)
+
+        if stock_contract is None:
+
+            stock = Stock(symbol, "SMART", "USD")
+
+            qualified = await self.ib.qualifyContractsAsync(stock)
+
+            if not qualified:
+                return None
+
+            stock_contract = qualified[0]
+
+            self._stock_contracts[symbol] = stock_contract
+
+        return await self.market_data.get_stock_price(stock_contract)
 
     async def get_put_contracts(
         self,

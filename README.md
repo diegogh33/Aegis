@@ -260,6 +260,17 @@ CLI / Dashboard
     normaliza `None`/`-1`/`NaN` a `None` de forma consistente. También
     se ha eliminado un bloque de `print()` de debug que ensuciaba la
     salida del CLI con el detalle de cada contrato.
+-   **`underlying_price` con fallback al precio de la acción.**
+    Con la suscripción de opciones bloqueada (error 10091), el
+    `underlying_price` de cada opción individual llegaba siempre
+    vacío, y `AnalysisService` descartaba silenciosamente el 100% de
+    los contratos (`if underlying_price is None: continue`) — la
+    tabla del CLI salía vacía sin ningún error visible. Ahora
+    `IBKRProvider.get_underlying_price()` pide el precio de la propia
+    acción (que normalmente sí tiene datos disponibles, a diferencia
+    de sus opciones) una sola vez por análisis, y `OptionScanner` lo
+    usa como valor de respaldo cuando el de la opción individual
+    viene vacío.
 
 ## Lo que NO funciona todavía / limitaciones conocidas
 
@@ -280,12 +291,13 @@ CLI / Dashboard
     `IVRankFilter`, `LiquidityFilter` como regla bloqueante (hoy es un
     servicio aparte, `app/services/liquidity_filter.py`), y filtro de
     spread.
--   **`mypy app` reporta 17 errores** (bajó de ~31 tras reparar
-    `MetricsEngine`/`OptionScoreEngine`), concentrados sobre todo en
-    `providers/ibkr/provider.py` (manejo de `Contract | None` de
-    `ib_async`). No bloquean la ejecución del flujo actual pero
-    indican inconsistencias de tipos reales. Pendientes de una
-    limpieza dedicada — requiere validación contra IBKR real.
+-   **`mypy app` reporta 20 errores** (subió ligeramente de 17 a 20:
+    el nuevo código de `get_underlying_price()` en
+    `providers/ibkr/provider.py` toca el mismo problema de tipos ya
+    documentado, `Contract | None` de `ib_async`). No bloquean la
+    ejecución del flujo actual pero indican inconsistencias de tipos
+    reales. Pendientes de una limpieza dedicada — requiere validación
+    contra IBKR real.
 -   **Suscripción de market data de IBKR insuficiente para opciones
     US.** Confirmado en pruebas reales: `Error 10091 - Part of
     requested market data requires additional subscription for API`.
@@ -361,6 +373,7 @@ tests/
     services/
         test_analysis_service.py
         test_liquidity_filter.py
+        test_option_scanner.py
     strategies/
         test_cash_secured_put.py
 ```

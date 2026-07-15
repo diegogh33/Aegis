@@ -32,6 +32,16 @@ class OptionScanner:
         # Durante el desarrollo limitamos el número
         contracts = contracts[:10]
 
+        # El precio del subyacente se pide una sola vez por escaneo.
+        # Esto existe porque, cuando la cuenta de IBKR no tiene
+        # suscripción de datos de opciones (error 10091), el
+        # underlying_price de cada opción individual llega vacío,
+        # pero el precio de la propia acción normalmente sí está
+        # disponible.
+        fallback_underlying_price = await self.provider.get_underlying_price(
+            symbol
+        )
+
         tasks = [
             self.provider.get_market_data(contract)
             for contract in contracts
@@ -43,12 +53,18 @@ class OptionScanner:
 
         for contract, market in zip(contracts, markets):
 
+            underlying_price = (
+                market.underlying_price
+                if market.underlying_price is not None
+                else fallback_underlying_price
+            )
+
             enriched.append(
                 replace(
                     contract,
 
                     # Underlying
-                    underlying_price=market.underlying_price,
+                    underlying_price=underlying_price,
 
                     # Prices
                     bid=market.bid,
