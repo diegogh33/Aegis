@@ -251,6 +251,15 @@ CLI / Dashboard
     (`tests/services/test_analysis_service.py`), cubriendo: scoring y
     ranking de contratos elegibles, rechazo por earnings próximos, y
     descarte de contratos sin `underlying_price`.
+-   **CLI probado contra IBKR real por primera vez** (ticker AAPL).
+    Destapó un segundo bug de ejecución: `MarketDataProvider` no
+    trataba `NaN` como dato ausente (solo `None`/`-1`), así que un
+    `NaN` de IBKR llegaba intacto hasta `LiquidityFilter` y explotaba
+    con `decimal.InvalidOperation` al compararlo. Corregido con
+    `_decimal_or_none()` en `app/providers/ibkr/market_data.py`, que
+    normaliza `None`/`-1`/`NaN` a `None` de forma consistente. También
+    se ha eliminado un bloque de `print()` de debug que ensuciaba la
+    salida del CLI con el detalle de cada contrato.
 
 ## Lo que NO funciona todavía / limitaciones conocidas
 
@@ -277,6 +286,16 @@ CLI / Dashboard
     `ib_async`). No bloquean la ejecución del flujo actual pero
     indican inconsistencias de tipos reales. Pendientes de una
     limpieza dedicada — requiere validación contra IBKR real.
+-   **Suscripción de market data de IBKR insuficiente para opciones
+    US.** Confirmado en pruebas reales: `Error 10091 - Part of
+    requested market data requires additional subscription for API`.
+    Esto no es un bug de Aegis — es una limitación de la suscripción
+    de datos de mercado de la cuenta IBKR usada. Mientras no se
+    resuelva (contratando la suscripción correspondiente en IBKR),
+    la mayoría de contratos llegarán con `bid`/`ask`/Greeks en `None`
+    y `LiquidityFilter` los mantendrá igualmente (comportamiento de
+    "modo desarrollo" ya documentado), pero el scoring real sobre esos
+    contratos será poco significativo al faltar datos de mercado.
 -   **IBKR con datos delayed** (`reqMarketDataType(3)` en el histórico
     de pruebas manuales) — los Greeks e IV pueden no ser en tiempo
     real según el tipo de suscripción de market data usada.
@@ -333,12 +352,15 @@ tests/
     engines/
         test_metrics_engine.py
         test_option_score_engine.py
+    providers/
+        test_market_data.py
     rules/
         test_delta_rule.py
         test_company_approved_rule.py
         test_no_earnings_rule.py
     services/
         test_analysis_service.py
+        test_liquidity_filter.py
     strategies/
         test_cash_secured_put.py
 ```

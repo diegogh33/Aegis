@@ -1,11 +1,37 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from decimal import Decimal
 
 from ib_async import IB, Ticker
 
 from app.models.market_data import MarketData
+
+
+def _decimal_or_none(value: float | None) -> Decimal | None:
+    """
+    Converts an IBKR tick value into a clean Decimal, or None if the
+    value is missing.
+
+    IBKR/ib_async represents "no data" in more than one way depending
+    on the field: None, -1, or NaN (float('nan')). NaN in particular
+    is easy to miss because `nan not in (None, -1)` is True (NaN never
+    equals anything, including itself), so it slips through as if it
+    were a real price - and later breaks any Decimal comparison with
+    decimal.InvalidOperation.
+    """
+
+    if value is None:
+        return None
+
+    if isinstance(value, float) and math.isnan(value):
+        return None
+
+    if value == -1:
+        return None
+
+    return Decimal(str(value))
 
 
 class MarketDataProvider:
@@ -27,59 +53,16 @@ class MarketDataProvider:
 
         greeks = ticker.modelGreeks
 
-        bid = (
-            Decimal(str(ticker.bid))
-            if ticker.bid not in (None, -1)
-            else None
-        )
-
-        ask = (
-            Decimal(str(ticker.ask))
-            if ticker.ask not in (None, -1)
-            else None
-        )
-
-        last = (
-            Decimal(str(ticker.last))
-            if ticker.last not in (None, -1)
-            else None
-        )
+        bid = _decimal_or_none(ticker.bid)
+        ask = _decimal_or_none(ticker.ask)
+        last = _decimal_or_none(ticker.last)
 
         mark = None
 
         if bid is not None and ask is not None:
             mark = (bid + ask) / Decimal("2")
 
-        underlying = None
-
-        market_price = ticker.marketPrice()
-
-        if market_price not in (None, -1):
-            underlying = Decimal(str(market_price))
-
-        #
-        # DEBUG
-        #
-
-        print()
-        print("=" * 80)
-        print(f"Contract      : {contract.localSymbol}")
-        print(f"Underlying    : {underlying}")
-        print(f"Bid           : {bid}")
-        print(f"Ask           : {ask}")
-        print(f"Last          : {last}")
-        print(f"Market Price  : {market_price}")
-        print(f"Model Greeks  : {greeks}")
-
-        if greeks:
-            print(f"Delta         : {greeks.delta}")
-            print(f"Gamma         : {greeks.gamma}")
-            print(f"Theta         : {greeks.theta}")
-            print(f"Vega          : {greeks.vega}")
-            print(f"IV            : {greeks.impliedVol}")
-
-        print("=" * 80)
-        print()
+        underlying = _decimal_or_none(ticker.marketPrice())
 
         self.ib.cancelMktData(contract)
 
@@ -91,36 +74,19 @@ class MarketDataProvider:
             last=last,
             mark=mark,
 
-            delta=(
-                Decimal(str(greeks.delta))
-                if greeks and greeks.delta is not None
-                else None
-            ),
-
-            gamma=(
-                Decimal(str(greeks.gamma))
-                if greeks and greeks.gamma is not None
-                else None
-            ),
-
-            theta=(
-                Decimal(str(greeks.theta))
-                if greeks and greeks.theta is not None
-                else None
-            ),
-
-            vega=(
-                Decimal(str(greeks.vega))
-                if greeks and greeks.vega is not None
-                else None
-            ),
+            delta=_decimal_or_none(greeks.delta) if greeks else None,
+            gamma=_decimal_or_none(greeks.gamma) if greeks else None,
+            theta=_decimal_or_none(greeks.theta) if greeks else None,
+            vega=_decimal_or_none(greeks.vega) if greeks else None,
 
             implied_volatility=(
-                Decimal(str(greeks.impliedVol))
-                if greeks and greeks.impliedVol is not None
-                else None
+                _decimal_or_none(greeks.impliedVol) if greeks else None
             ),
 
-            volume=ticker.volume,
+            volume=(
+                None
+                if ticker.volume is None or math.isnan(ticker.volume)
+                else ticker.volume
+            ),
             open_interest=None,
         )
