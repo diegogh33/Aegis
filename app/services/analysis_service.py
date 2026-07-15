@@ -5,6 +5,7 @@ from app.engines.option_score_engine import OptionScoreEngine
 from app.models.analysis_result import AnalysisResult
 from app.models.investment_candidate import InvestmentCandidate
 from app.models.investment_thesis import InvestmentThesis
+from app.models.rejected_contract import RejectedContract
 from app.models.scored_option import ScoredOption
 from app.providers.alphavantage.provider import AlphaVantageProvider
 from app.providers.ibkr.provider import IBKRProvider
@@ -39,10 +40,21 @@ class AnalysisService:
         contracts = await self.scanner.scan_puts(ticker)
 
         ranked: list[ScoredOption] = []
+        rejected: list[RejectedContract] = []
 
         for contract in contracts:
 
             if contract.underlying_price is None:
+                rejected.append(
+                    RejectedContract(
+                        option=contract,
+                        reason="NO_UNDERLYING_PRICE",
+                        detail=(
+                            "No underlying price available (from the "
+                            "option itself or the stock fallback)."
+                        ),
+                    )
+                )
                 continue
 
             # NOTE: InvestmentThesis.approved is hardcoded to True for now.
@@ -62,6 +74,16 @@ class AnalysisService:
             evaluation = self.strategy.evaluate(candidate)
 
             if not evaluation.passed:
+
+                blocker = evaluation.blockers[0]
+
+                rejected.append(
+                    RejectedContract(
+                        option=contract,
+                        reason=blocker.rule_id,
+                        detail=blocker.message,
+                    )
+                )
                 continue
 
             metrics = MetricsEngine.calculate(
@@ -91,4 +113,5 @@ class AnalysisService:
         return AnalysisResult(
             company=company,
             contracts=ranked,
+            rejected=rejected,
         )

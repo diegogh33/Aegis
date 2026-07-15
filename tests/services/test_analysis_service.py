@@ -58,6 +58,10 @@ async def test_analyze_rejects_contracts_with_delta_out_of_range():
     assert len(result.contracts) == 1
     assert result.contracts[0].option.delta == Decimal("-0.20")
 
+    assert len(result.rejected) == 1
+    assert result.rejected[0].reason == "DELTA"
+    assert result.rejected[0].option.delta == Decimal("-0.45")
+
 
 @pytest.mark.asyncio
 async def test_analyze_rejects_contracts_with_upcoming_earnings():
@@ -80,10 +84,12 @@ async def test_analyze_rejects_contracts_with_upcoming_earnings():
     # Earnings in 3 days is inside the default minimum_days window,
     # so the only candidate should be filtered out by the Constitution.
     assert result.contracts == []
+    assert len(result.rejected) == 1
+    assert result.rejected[0].reason == "NO_EARNINGS"
 
 
 @pytest.mark.asyncio
-async def test_analyze_skips_contracts_without_underlying_price():
+async def test_analyze_tracks_contracts_without_underlying_price_as_rejected():
     from dataclasses import replace
 
     company = build_company(next_earnings=None)
@@ -101,3 +107,5 @@ async def test_analyze_skips_contracts_without_underlying_price():
     result = await service.analyze("SAP")
 
     assert result.contracts == []
+    assert len(result.rejected) == 1
+    assert result.rejected[0].reason == "NO_UNDERLYING_PRICE"

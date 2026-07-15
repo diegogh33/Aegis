@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import Counter
 
 from rich.console import Console
 from rich.table import Table
@@ -86,6 +87,37 @@ async def _analyze(ticker: str) -> None:
 
         console.print()
         console.print(options)
+
+        if result.rejected:
+
+            reasons = Counter(item.reason for item in result.rejected)
+
+            example_detail = {
+                item.reason: item.detail for item in result.rejected
+            }
+
+            rejected_table = Table(title="Rejected Contracts")
+
+            rejected_table.add_column("Reason")
+            rejected_table.add_column("Count", justify="right")
+            rejected_table.add_column("Example")
+
+            for reason, count in reasons.most_common():
+                rejected_table.add_row(
+                    reason,
+                    str(count),
+                    example_detail[reason],
+                )
+
+            console.print()
+            console.print(rejected_table)
+
+        if not result.contracts:
+            console.print(
+                "\n[bold yellow]No candidates passed the Constitution "
+                "or had usable market data.[/] See 'Rejected Contracts' "
+                "above for why."
+            )
 
         console.print("\n[bold green]Analysis completed[/]")
 

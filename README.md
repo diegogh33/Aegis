@@ -354,6 +354,18 @@ CLI / Dashboard
     `cash_secured_put.premium.minimum_annualized_return` sigue
     existiendo en el YAML — es un umbral de filtro distinto, no
     relacionado con este score, y no se ha tocado.
+-   **El CLI ya explica por qué la tabla de resultados sale vacía o
+    incompleta, en vez de silencio total.** Antes, un contrato
+    descartado (por falta de `underlying_price` o por fallar la
+    Constitution) simplemente desaparecía sin dejar rastro — así fue
+    como una tabla vacía por mercado cerrado se confundió al
+    principio con un bug real. `AnalysisService.analyze()` ahora
+    devuelve también `rejected: list[RejectedContract]` (contrato +
+    motivo: `NO_UNDERLYING_PRICE`, o el `rule_id` de la regla de
+    Constitution que bloqueó, ej. `DELTA`, `DTE`, `NO_EARNINGS`). El
+    CLI muestra una tabla "Rejected Contracts" agrupada por motivo con
+    conteo y un mensaje de ejemplo, y un aviso explícito si la tabla
+    de candidatos queda vacía del todo.
 
 ## Lo que NO funciona todavía / limitaciones conocidas
 
@@ -424,6 +436,7 @@ app/
         analysis_result.py
         investment_candidate.py
         investment_thesis.py
+        rejected_contract.py
     providers/
         alphavantage/
         ibkr/
@@ -620,9 +633,10 @@ Overall Score: 96
 ```
 
 Nota: el CLI actual (`app/cli/commands/analyze.py`) ya produce una
-tabla de empresa y una tabla de mejores PUT candidatas con score, pero
-todavía sin el filtro de Constitution aplicado ni el "Fundamental
-Score" como campo independiente.
+tabla de empresa, una tabla de mejores PUT candidatas con score y
+recomendación (con el filtro de Constitution ya aplicado), y una
+tabla de contratos rechazados agrupados por motivo. Sigue sin existir
+el "Fundamental Score" como campo independiente.
 
 ------------------------------------------------------------------------
 
