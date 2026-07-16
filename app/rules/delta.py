@@ -17,9 +17,13 @@ class DeltaRule(Rule):
     instead of turning this into a strict binary cutoff.
 
     Reads pass_min/pass_max/warning_min from constitution.yaml
-    (cash_secured_put.delta.preferred.min/max,
-    cash_secured_put.delta.warning.min) via Settings by default,
-    following DTERule's pattern.
+    (<config_section>.delta.preferred.min/max,
+    <config_section>.delta.warning.min) via Settings by default,
+    following DTERule's pattern. config_section defaults to
+    "cash_secured_put" (the recurring strategy); the long-term
+    strategy reuses this same class with config_section=
+    "long_term_put" instead of duplicating it, since the logic is
+    identical - only the thresholds differ.
     """
 
     id = "DELTA"
@@ -34,12 +38,13 @@ class DeltaRule(Rule):
         pass_max: float | None = None,
         warning_min: float | None = None,
         settings: Settings | None = None,
+        config_section: str = "cash_secured_put",
     ):
         if pass_min is None or pass_max is None or warning_min is None:
 
             settings = settings or Settings()
 
-            delta_config = settings.get("cash_secured_put", "delta")
+            delta_config = settings.get(config_section, "delta")
 
             if pass_min is None:
                 pass_min = delta_config["preferred"]["min"]

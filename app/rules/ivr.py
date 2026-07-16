@@ -46,6 +46,8 @@ class IVRankRule(Rule):
         minimum_days_history: int | None = None,
         settings: Settings | None = None,
         repository: IVHistoryRepository | None = None,
+        config_section: str = "cash_secured_put",
+        can_block: bool = True,
     ):
         if (
             minimum is None
@@ -56,7 +58,7 @@ class IVRankRule(Rule):
 
             settings = settings or Settings()
 
-            ivr_config = settings.get("cash_secured_put", "ivr")
+            ivr_config = settings.get(config_section, "ivr")
 
             if minimum is None:
                 minimum = Decimal(str(ivr_config["minimum"]))
@@ -76,6 +78,7 @@ class IVRankRule(Rule):
         self.preferred_minimum = preferred_minimum
         self.lookback_days = lookback_days
         self.minimum_days_history = minimum_days_history
+        self.can_block = can_block
 
         if repository is None:
             settings = settings or Settings()
@@ -153,5 +156,5 @@ class IVRankRule(Rule):
             status=RuleStatus.FAIL,
             score=Decimal("0"),
             message=f"IV Rank {rank:.1f} is below the minimum of {self.minimum}.",
-            blocker=True,
+            blocker=self.can_block,
         )

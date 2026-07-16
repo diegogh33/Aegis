@@ -34,10 +34,16 @@ class OptionScanner:
         exchange: str = "SMART",
         currency: str = "USD",
         batch_size: int = 6,
+        dte_window: dict | None = None,
+        target_delta: float | None = None,
     ) -> list[OptionContract]:
 
         contracts = await self.provider.get_put_contracts(
-            symbol, exchange=exchange, currency=currency
+            symbol,
+            exchange=exchange,
+            currency=currency,
+            dte_window=dte_window,
+            target_delta=target_delta,
         )
 
         # El precio del subyacente se pide una sola vez por escaneo.

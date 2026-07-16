@@ -11,13 +11,15 @@ class DTERule(Rule):
     """
     Evaluates whether the option's days-to-expiration falls within the
     Constitution's allowed range (config/constitution.yaml,
-    cash_secured_put.dte).
+    <config_section>.dte).
 
     Unlike DeltaRule and NoUpcomingEarningsRule, this rule reads its
     thresholds from Settings instead of hardcoding them - the
     Constitution's own "Configuration First" principle. min/max can
     be overridden explicitly (e.g. for tests) without touching the
-    YAML file.
+    YAML file. config_section defaults to "cash_secured_put"; the
+    long-term strategy reuses this class with config_section=
+    "long_term_put" instead of duplicating it.
     """
 
     id = "DTE"
@@ -31,12 +33,13 @@ class DTERule(Rule):
         min_dte: int | None = None,
         max_dte: int | None = None,
         settings: Settings | None = None,
+        config_section: str = "cash_secured_put",
     ):
         if min_dte is None or max_dte is None:
 
             settings = settings or Settings()
 
-            dte_config = settings.get("cash_secured_put", "dte")
+            dte_config = settings.get(config_section, "dte")
 
             if min_dte is None:
                 min_dte = dte_config["min"]

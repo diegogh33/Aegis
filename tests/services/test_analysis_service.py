@@ -314,3 +314,56 @@ async def test_analyze_accepts_contracts_when_atlas_verdict_is_posicion(iv_histo
     result = await service.analyze("SAP")
 
     assert len(result.contracts) == 1
+
+
+@pytest.mark.asyncio
+async def test_analyze_uses_long_term_strategy_and_scan_window_when_requested(
+    iv_history_repository,
+):
+    """
+    long_term=True should route through LongTermPutStrategy (90-365
+    DTE, -0.10/-0.30 delta) instead of the recurring
+    CashSecuredPutStrategy, and pass the long_term_put scan window/
+    target delta down to scan_puts() instead of the defaults.
+    """
+    company = build_company(next_earnings=None)
+
+    # 133 DTE, delta -0.27, strike 120 vs price 135 - passes the
+    # long-term strategy but would fail the recurring one (DTE far
+    # outside 30-45).
+    from dataclasses import replace
+
+    option = build_option(delta=-0.27, dte=133)
+    option = replace(option, strike=Decimal("120"), underlying_price=Decimal("135"))
+
+    alpha = AsyncMock()
+    alpha.get_company.return_value = company
+
+    ibkr = AsyncMock()
+
+    atlas = AsyncMock()
+    atlas.get_entry.return_value = AtlasEntry(
+        ticker="ACN",
+        nombre="Accenture",
+        valoracion="alcista",
+        resumen=None,
+        fecha=None,
+        zona_compra=None,
+        entrada_max=135.0,
+    )
+
+    service = AnalysisService(
+        alpha_provider=alpha,
+        ibkr_provider=ibkr,
+        atlas_provider=atlas,
+        iv_history_repository=iv_history_repository,
+    )
+    service.scanner.scan_puts = AsyncMock(return_value=[option])
+
+    result = await service.analyze("ACN", long_term=True)
+
+    assert len(result.contracts) == 1
+
+    _, kwargs = service.scanner.scan_puts.call_args
+    assert kwargs["dte_window"] == {"min": 90, "max": 365}
+    assert kwargs["target_delta"] == -0.20

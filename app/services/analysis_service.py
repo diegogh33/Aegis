@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 from statistics import median
 
+from app.config.settings import Settings
 from app.engines.metrics_engine import MetricsEngine
 from app.engines.option_score_engine import OptionScoreEngine
 from app.iv_history.repository import IVHistoryRepository, IVSnapshot
@@ -19,6 +20,7 @@ from app.providers.atlas.thesis_mapper import thesis_from_atlas_entry
 from app.providers.ibkr.provider import IBKRProvider
 from app.services.option_scanner import OptionScanner
 from app.strategies.cash_secured_put import CashSecuredPutStrategy
+from app.strategies.long_term_put import LongTermPutStrategy
 
 
 class AnalysisService:
@@ -40,8 +42,6 @@ class AnalysisService:
         self.scorer = OptionScoreEngine()
 
         if iv_history_repository is None:
-            from app.config.settings import Settings
-
             iv_history_repository = IVHistoryRepository(
                 Settings().iv_history_db_path
             )
@@ -52,11 +52,16 @@ class AnalysisService:
             iv_history_repository=self.iv_history
         )
 
+        self.long_term_strategy = LongTermPutStrategy(
+            iv_history_repository=self.iv_history
+        )
+
     async def analyze(
         self,
         ticker: str,
         exchange: str = "SMART",
         currency: str = "USD",
+        long_term: bool = False,
     ) -> AnalysisResult:
 
         company_known = True
@@ -94,8 +99,27 @@ class AnalysisService:
         atlas_entry = await self.atlas.get_entry(ticker)
         thesis = thesis_from_atlas_entry(atlas_entry)
 
+        strategy = self.long_term_strategy if long_term else self.strategy
+
+        scan_kwargs: dict = {}
+
+        if long_term:
+
+            settings = Settings()
+
+            scan_kwargs["dte_window"] = settings.get(
+                "long_term_put", "scan_dte_window"
+            )
+
+            delta_config = settings.get("long_term_put", "delta")
+
+            scan_kwargs["target_delta"] = (
+                delta_config["preferred"]["min"]
+                + delta_config["preferred"]["max"]
+            ) / 2
+
         contracts = await self.scanner.scan_puts(
-            ticker, exchange=exchange, currency=currency
+            ticker, exchange=exchange, currency=currency, **scan_kwargs
         )
 
         # Se guarda un snapshot diario de IV para el histórico de
@@ -145,7 +169,7 @@ class AnalysisService:
                 option=contract,
             )
 
-            evaluation = self.strategy.evaluate(candidate)
+            evaluation = strategy.evaluate(candidate)
 
             if not evaluation.passed:
 

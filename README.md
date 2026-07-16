@@ -327,6 +327,56 @@ CLI / Dashboard
         sentido (ej. IV=21% rankeando 100). Corregido: ambos se
         comparan en fracción: `calculate_iv_rank()` ya normaliza
         internamente a 0-100 en su propia fórmula.
+-   **`LongTermPutStrategy` — nueva estrategia oportunista para
+    caídas de alta convicción, activada con `--long-term`.**
+    Complementaria a la venta de primas recurrente
+    (`CashSecuredPutStrategy`), no la sustituye ni cambia su
+    comportamiento por defecto. Motivada por un caso real: ACN cayó a
+    ~$135 de forma que Diego consideró sobrerreacción del mercado, y
+    vendió un PUT strike $120 a vencimiento noviembre (~133 DTE) por
+    una prima de $8.80 — o el precio no baja más y se queda la prima,
+    o baja y se compran acciones a $120, un precio ya considerado
+    atractivo.
+    -   **Ventana propia**: DTE 90-365 días
+        (`long_term_put.dte`/`long_term_put.scan_dte_window` en
+        `constitution.yaml`), muy por encima de los 30-45 días de la
+        estrategia recurrente.
+    -   **Delta más bajo/conservador**: rango preferido -0.10/-0.30
+        (`long_term_put.delta`), calibrado con Black-Scholes contra
+        el propio ejemplo real de Diego — con IV~48% y ~133 DTE, un
+        strike $120 sobre precio $135 da un delta estimado de -0.27,
+        no -0.05/-0.15 como se había propuesto inicialmente antes de
+        hacer el cálculo (a más DTE, un mismo strike OTM tiende a
+        tener delta más alto, no más bajo — lo contrario de la
+        intuición inicial).
+    -   **`BelowBuyZoneRule` (nueva)**: exige que el strike esté al
+        nivel o por debajo del techo de entrada de ATLAS
+        (`InvestmentThesis.buy_price`, mapeado desde `entrada_max` de
+        ATLAS — vender un PUT con strike por encima de ese techo
+        significaría comprar acciones a un precio que ya no se
+        considera atractivo, justo lo contrario del propósito de la
+        estrategia). Si el ticker no tiene entrada en ATLAS (caída
+        puntual, nunca analizado a fondo — caso explícitamente
+        soportado a petición de Diego), **no bloquea**: muestra el
+        % de descuento del strike sobre el precio actual como
+        contexto, para que la decisión la tome él con esa
+        información delante, en vez de que la estrategia quede
+        indisponible por falta de un análisis formal previo.
+    -   **`IVRankRule` informativo, no bloqueante aquí**
+        (`can_block=False`) — con un horizonte de 90-365 días, el
+        IVR del momento del análisis pesa mucho menos que en la
+        estrategia recurrente de ~30-45 días.
+    -   **Reutiliza sin duplicar**: `DeltaRule` y `DTERule` ganaron
+        un parámetro `config_section` (por defecto
+        `"cash_secured_put"`) para leer los umbrales de
+        `long_term_put` en vez de duplicar toda la clase — misma
+        lógica, distinta sección de configuración.
+    -   `CompanyApprovedRule`, `NoUpcomingEarningsRule`,
+        `LiquidityRule`, `SpreadRule` se reutilizan sin cambios.
+    -   CLI: `uv run python -m app.main ACN --long-term` — comando
+        separado de la estrategia recurrente (no se ejecutan ambas
+        a la vez), con su propio título de tabla
+        ("Best Long-Term PUT Candidates").
 -   `config/constitution.yaml` ya contiene toda la configuración de
     reglas (delta, earnings, liquidez, spread, premium, pesos de
     scoring) — la configuración va por delante del código que la
@@ -765,6 +815,7 @@ app/
         ibkr/
     rules/
         base.py
+        below_buy_zone.py
         delta.py
         dte.py
         ivr.py
@@ -777,6 +828,9 @@ app/
         option_scanner.py
         analysis_service.py
     strategies/
+        base.py
+        cash_secured_put.py
+        long_term_put.py
     utils/
 
 tests/
@@ -807,11 +861,13 @@ tests/
         test_liquidity_rule.py
         test_spread_rule.py
         test_ivr_rule.py
+        test_below_buy_zone_rule.py
     services/
         test_analysis_service.py
         test_option_scanner.py
     strategies/
         test_cash_secured_put.py
+        test_long_term_put.py
 ```
 
 ------------------------------------------------------------------------
@@ -1083,6 +1139,17 @@ sigue usando el ticker tal cual para los datos fundamentales de la
 empresa — si el símbolo necesita un sufijo distinto en AlphaVantage
 para mercados no estadounidenses (ej. `SAN.MC`), eso no está resuelto
 todavía; solo afecta a la tabla "Company", no a la de opciones.
+
+Para la estrategia oportunista de largo plazo (caídas de alta
+convicción, DTE 90-365 días), pasa `--long-term`:
+
+``` bash
+uv run python -m app.main ACN --long-term
+```
+
+Es un comando separado de la estrategia recurrente — no se ejecutan
+ambas a la vez. Ver la sección de arquitectura sobre
+`LongTermPutStrategy` para el diseño completo.
 
 Esto **no se puede validar en un entorno aislado sin conexión a IBKR**;
 es la parte que cada colaborador debe probar en su propia máquina antes

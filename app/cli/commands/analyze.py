@@ -18,6 +18,7 @@ def analyze(
     ticker: str,
     exchange: str = "SMART",
     currency: str = "USD",
+    long_term: bool = False,
 ) -> None:
     """
     Analyzes a ticker's Cash Secured Put candidates.
@@ -26,11 +27,25 @@ def analyze(
     --currency EUR. --exchange usually stays "SMART" (IBKR's
     SmartRouting finds the right market) unless a specific routing
     is needed.
+
+    --long-term switches to the opportunistic long-dated PUT strategy
+    (90-365 DTE, wider/lower delta range) instead of the recurring
+    30-45 DTE strategy - for high-conviction price dips where being
+    assigned shares at the strike is itself an attractive outcome.
     """
-    asyncio.run(_analyze(ticker, exchange=exchange, currency=currency))
+    asyncio.run(
+        _analyze(
+            ticker,
+            exchange=exchange,
+            currency=currency,
+            long_term=long_term,
+        )
+    )
 
 
-async def _analyze(ticker: str, exchange: str, currency: str) -> None:
+async def _analyze(
+    ticker: str, exchange: str, currency: str, long_term: bool
+) -> None:
 
     alpha = AlphaVantageProvider()
     ibkr = IBKRProvider()
@@ -39,6 +54,11 @@ async def _analyze(ticker: str, exchange: str, currency: str) -> None:
     try:
 
         console.rule("[bold blue]Aegis[/]")
+
+        if long_term:
+            console.print(
+                "[bold]Mode: long-term opportunistic (90-365 DTE)[/]"
+            )
 
         console.print("[bold]Connecting to IBKR...[/]")
 
@@ -53,7 +73,10 @@ async def _analyze(ticker: str, exchange: str, currency: str) -> None:
         )
 
         result = await service.analyze(
-            ticker, exchange=exchange, currency=currency
+            ticker,
+            exchange=exchange,
+            currency=currency,
+            long_term=long_term,
         )
 
         company = result.company
@@ -100,7 +123,13 @@ async def _analyze(ticker: str, exchange: str, currency: str) -> None:
                 f"recorded investment thesis."
             )
 
-        options = Table(title="Best PUT Candidates")
+        options = Table(
+            title=(
+                "Best Long-Term PUT Candidates"
+                if long_term
+                else "Best PUT Candidates"
+            )
+        )
 
         options.add_column("Score", justify="right")
         options.add_column("Strike", justify="right")

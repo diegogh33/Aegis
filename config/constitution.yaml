@@ -90,3 +90,30 @@ cash_secured_put:
     annualized_return:
       weight: 45
       target: 15
+
+long_term_put:
+
+  # Estrategia oportunista, distinta de la venta de primas recurrente
+  # (cash_secured_put): se activa manualmente con --long-term, para
+  # convicción alta en caídas puntuales (ej. ACN a $135, strike $120,
+  # vencimiento a ~4 meses) — no forma parte del análisis por defecto.
+
+  delta:
+
+    preferred:
+      min: -0.30
+      max: -0.10
+
+    warning:
+      min: -0.35
+
+  dte:
+
+    min: 90
+    max: 365
+
+  # Ventana de escaneo de vencimientos (distinta de scan.dte_window,
+  # pensada para la ventana corta de la estrategia recurrente).
+  scan_dte_window:
+    min: 90
+    max: 365

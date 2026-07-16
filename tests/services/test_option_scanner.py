@@ -41,7 +41,11 @@ async def test_propagates_exchange_and_currency_to_provider():
     await scanner.scan_puts("SAN", exchange="SMART", currency="EUR")
 
     provider.get_put_contracts.assert_awaited_once_with(
-        "SAN", exchange="SMART", currency="EUR"
+        "SAN",
+        exchange="SMART",
+        currency="EUR",
+        dte_window=None,
+        target_delta=None,
     )
     provider.get_underlying_price.assert_awaited_once_with(
         "SAN", exchange="SMART", currency="EUR"

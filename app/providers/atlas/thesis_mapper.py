@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 from app.models.investment_thesis import InvestmentThesis
 from app.providers.atlas.dto import AtlasEntry
 
@@ -27,6 +29,10 @@ def thesis_from_atlas_entry(entry: AtlasEntry | None) -> InvestmentThesis:
     watchlist=True: the Constitution should be more cautious about
     companies still under observation than ones with a confirmed
     investment thesis.
+
+    entrada_max maps to buy_price - used by BelowBuyZoneRule (long
+    term strategy) to check whether a strike sits below Diego's own
+    "worth entering" ceiling for the stock.
     """
 
     if entry is None:
@@ -36,4 +42,9 @@ def thesis_from_atlas_entry(entry: AtlasEntry | None) -> InvestmentThesis:
         approved=entry.valoracion in _APPROVED_VALORACIONES,
         watchlist=entry.valoracion in _WATCHLIST_VALORACIONES,
         notes=entry.resumen,
+        buy_price=(
+            Decimal(str(entry.entrada_max))
+            if entry.entrada_max is not None
+            else None
+        ),
     )

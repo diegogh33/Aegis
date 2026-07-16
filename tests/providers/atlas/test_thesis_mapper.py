@@ -61,3 +61,27 @@ def test_notes_come_from_resumen():
     thesis = thesis_from_atlas_entry(_entry("alcista"))
 
     assert thesis.notes == "Some summary."
+
+
+def test_entrada_max_maps_to_buy_price():
+    from decimal import Decimal
+
+    entry = AtlasEntry(
+        ticker="ACN",
+        nombre="Accenture",
+        valoracion="alcista",
+        resumen=None,
+        fecha=None,
+        zona_compra=None,
+        entrada_max=160.0,
+    )
+
+    thesis = thesis_from_atlas_entry(entry)
+
+    assert thesis.buy_price == Decimal("160.0")
+
+
+def test_missing_entrada_max_leaves_buy_price_none():
+    thesis = thesis_from_atlas_entry(_entry("alcista"))
+
+    assert thesis.buy_price is None

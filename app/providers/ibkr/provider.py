@@ -252,13 +252,23 @@ class IBKRProvider:
         symbol: str,
         exchange: str = "SMART",
         currency: str = "USD",
+        dte_window: dict | None = None,
+        target_delta: float | None = None,
     ) -> list[OptionContract]:
+        """
+        dte_window and target_delta let callers override the default
+        scan.dte_window / cash_secured_put.delta-derived values from
+        constitution.yaml - used by the long-term strategy, which
+        scans a much wider DTE window (90-365 days) and targets a
+        different delta range than the default recurring CSP scan.
+        """
 
         chain = await self.get_option_chain(
             symbol, exchange=exchange, currency=currency
         )
 
-        dte_window = self._settings.get("scan", "dte_window")
+        if dte_window is None:
+            dte_window = self._settings.get("scan", "dte_window")
 
         candidate_expirations = [
             expiration
@@ -291,12 +301,14 @@ class IBKRProvider:
         # preferido), usado para elegir qué strikes merece la pena
         # pedir a IBKR - no el rango de aceptación final, que sigue
         # aplicándose después con el delta real (DeltaRule).
-        delta_config = self._settings.get("cash_secured_put", "delta")
+        if target_delta is None:
 
-        target_delta = (
-            delta_config["preferred"]["min"]
-            + delta_config["preferred"]["max"]
-        ) / 2
+            delta_config = self._settings.get("cash_secured_put", "delta")
+
+            target_delta = (
+                delta_config["preferred"]["min"]
+                + delta_config["preferred"]["max"]
+            ) / 2
 
         # El precio del subyacente se pide una vez, antes de elegir
         # qué strikes traer por vencimiento - sin él no hay forma de
