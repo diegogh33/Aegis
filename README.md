@@ -414,6 +414,16 @@ CLI / Dashboard
     devolvían un `Contract` válido — ahora se valida explícitamente
     en runtime (`_as_single_contract()`), coincidiendo con lo que
     los stubs de `ib_async` ya declaraban como posible.
+-   **4 ficheros de código muerto más, encontrados de paso al
+    empezar a trabajar en IVR.** `app/models/candidate.py` (una
+    clase `Candidate`, distinta de `InvestmentCandidate`, nunca
+    importada), `app/models/ranked_contract.py` y
+    `app/models/watchlist.py` (mismo patrón: modelos completos sin
+    ninguna referencia real), y `app/builders/
+    investment_candidate_builder.py` (un builder para
+    `InvestmentCandidate` nunca usado —
+    `AnalysisService` lo construye directamente). El paquete
+    `app/builders/`, ya vacío, se eliminó también.
 -   **Score de "Premium" eliminado — estaba sin implementar
     (`0.0` fijo) y duplicaba `annualized_return`.** Análisis previo
     (documento externo, revisado y confirmado) mostró que
@@ -687,7 +697,6 @@ CLI / Dashboard
 
 ``` text
 app/
-    builders/
     cli/
         commands/
             analyze.py
@@ -1046,8 +1055,9 @@ de dar un cambio por terminado.
 -   [x] Conectar `CashSecuredPutStrategy` a `AnalysisService`.
 -   [x] Reparar `MetricsEngine` y `OptionScoreEngine` (estaban rotos
         de forma silenciosa, sin test que lo detectara).
--   [ ] Conectar una fuente de datos real para
-        `InvestmentThesis.approved` (hoy hardcodeado a `True`).
+-   [x] Conectar una fuente de datos real para
+        `InvestmentThesis.approved` (biblioteca ATLAS,
+        `diegogh33/atlas-research`).
 -   [ ] Poblar `Company.next_earnings` desde un provider real (hoy
         siempre `None`).
 -   [x] `DTERule` implementada y conectada (lee de
@@ -1065,8 +1075,9 @@ de dar un cambio por terminado.
 -   [ ] Construir `ConstitutionEngine` real conectado al flujo.
 -   [x] Resolver los errores de `mypy` (0 errores, bajó de 20; incluyó
         eliminar 5 ficheros de código muerto).
--   [ ] Confirmar el comportamiento de datos de IBKR con el mercado
-        US abierto (pendiente al cierre de esta sesión de trabajo).
+-   [x] Confirmar el comportamiento de datos de IBKR con el mercado
+        US abierto — validado en múltiples sesiones reales (AAPL,
+        ACN, DRAM, SAN, ITX), en US y Europa.
 
 ## Fase 2
 
