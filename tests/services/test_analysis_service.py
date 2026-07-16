@@ -31,7 +31,7 @@ def _approved_atlas() -> AsyncMock:
 
 
 @pytest.mark.asyncio
-async def test_analyze_scores_and_ranks_eligible_contracts():
+async def test_analyze_scores_and_ranks_eligible_contracts(iv_history_repository):
     company = build_company(next_earnings=None)
 
     # Both inside DeltaRule's pass/warning range, so both survive the
@@ -49,6 +49,7 @@ async def test_analyze_scores_and_ranks_eligible_contracts():
         alpha_provider=alpha,
         ibkr_provider=ibkr,
         atlas_provider=_approved_atlas(),
+        iv_history_repository=iv_history_repository,
     )
     service.scanner.scan_puts = AsyncMock(
         return_value=[good_option, warning_option]
@@ -62,7 +63,7 @@ async def test_analyze_scores_and_ranks_eligible_contracts():
 
 
 @pytest.mark.asyncio
-async def test_analyze_rejects_contracts_with_delta_out_of_range():
+async def test_analyze_rejects_contracts_with_delta_out_of_range(iv_history_repository):
     company = build_company(next_earnings=None)
 
     good_option = build_option(delta=-0.20)
@@ -77,6 +78,7 @@ async def test_analyze_rejects_contracts_with_delta_out_of_range():
         alpha_provider=alpha,
         ibkr_provider=ibkr,
         atlas_provider=_approved_atlas(),
+        iv_history_repository=iv_history_repository,
     )
     service.scanner.scan_puts = AsyncMock(
         return_value=[good_option, bad_delta_option]
@@ -95,7 +97,7 @@ async def test_analyze_rejects_contracts_with_delta_out_of_range():
 
 
 @pytest.mark.asyncio
-async def test_analyze_rejects_contracts_with_upcoming_earnings():
+async def test_analyze_rejects_contracts_with_upcoming_earnings(iv_history_repository):
     from datetime import date, timedelta
 
     company = build_company(next_earnings=date.today() + timedelta(days=3))
@@ -111,6 +113,7 @@ async def test_analyze_rejects_contracts_with_upcoming_earnings():
         alpha_provider=alpha,
         ibkr_provider=ibkr,
         atlas_provider=_approved_atlas(),
+        iv_history_repository=iv_history_repository,
     )
     service.scanner.scan_puts = AsyncMock(return_value=[option])
 
@@ -124,7 +127,7 @@ async def test_analyze_rejects_contracts_with_upcoming_earnings():
 
 
 @pytest.mark.asyncio
-async def test_analyze_tracks_contracts_without_underlying_price_as_rejected():
+async def test_analyze_tracks_contracts_without_underlying_price_as_rejected(iv_history_repository):
     from dataclasses import replace
 
     company = build_company(next_earnings=None)
@@ -140,6 +143,7 @@ async def test_analyze_tracks_contracts_without_underlying_price_as_rejected():
         alpha_provider=alpha,
         ibkr_provider=ibkr,
         atlas_provider=_approved_atlas(),
+        iv_history_repository=iv_history_repository,
     )
     service.scanner.scan_puts = AsyncMock(return_value=[option])
 
@@ -151,7 +155,7 @@ async def test_analyze_tracks_contracts_without_underlying_price_as_rejected():
 
 
 @pytest.mark.asyncio
-async def test_analyze_continues_with_options_when_company_is_unknown():
+async def test_analyze_continues_with_options_when_company_is_unknown(iv_history_repository):
     """
     Regression test: Alpha Vantage not recognizing a ticker (common
     for non-US symbols without a market suffix, e.g. "ITX") used to
@@ -179,7 +183,10 @@ async def test_analyze_continues_with_options_when_company_is_unknown():
     )
 
     service = AnalysisService(
-        alpha_provider=alpha, ibkr_provider=ibkr, atlas_provider=atlas
+        alpha_provider=alpha,
+        ibkr_provider=ibkr,
+        atlas_provider=atlas,
+        iv_history_repository=iv_history_repository,
     )
     service.scanner.scan_puts = AsyncMock(return_value=[option])
 
@@ -192,7 +199,7 @@ async def test_analyze_continues_with_options_when_company_is_unknown():
 
 
 @pytest.mark.asyncio
-async def test_analyze_continues_with_options_when_alphavantage_is_rate_limited():
+async def test_analyze_continues_with_options_when_alphavantage_is_rate_limited(iv_history_repository):
     """
     Regression test: Alpha Vantage's free tier returns a 25
     requests/day cap as an "Information" field, which the client
@@ -223,7 +230,10 @@ async def test_analyze_continues_with_options_when_alphavantage_is_rate_limited(
     )
 
     service = AnalysisService(
-        alpha_provider=alpha, ibkr_provider=ibkr, atlas_provider=atlas
+        alpha_provider=alpha,
+        ibkr_provider=ibkr,
+        atlas_provider=atlas,
+        iv_history_repository=iv_history_repository,
     )
     service.scanner.scan_puts = AsyncMock(return_value=[option])
 
@@ -235,7 +245,7 @@ async def test_analyze_continues_with_options_when_alphavantage_is_rate_limited(
 
 
 @pytest.mark.asyncio
-async def test_analyze_surfaces_contracts_even_when_company_not_approved_in_atlas():
+async def test_analyze_surfaces_contracts_even_when_company_not_approved_in_atlas(iv_history_repository):
     """
     Regression test: a ticker with no ATLAS entry (never analyzed)
     used to be rejected entirely by CompanyApprovedRule, producing an
@@ -255,7 +265,10 @@ async def test_analyze_surfaces_contracts_even_when_company_not_approved_in_atla
     atlas.get_entry.return_value = None  # never analyzed
 
     service = AnalysisService(
-        alpha_provider=alpha, ibkr_provider=ibkr, atlas_provider=atlas
+        alpha_provider=alpha,
+        ibkr_provider=ibkr,
+        atlas_provider=atlas,
+        iv_history_repository=iv_history_repository,
     )
     service.scanner.scan_puts = AsyncMock(return_value=[option])
 
@@ -266,7 +279,7 @@ async def test_analyze_surfaces_contracts_even_when_company_not_approved_in_atla
 
 
 @pytest.mark.asyncio
-async def test_analyze_accepts_contracts_when_atlas_verdict_is_posicion():
+async def test_analyze_accepts_contracts_when_atlas_verdict_is_posicion(iv_history_repository):
     """
     "posicion" (already holding a position, e.g. ARE in Diego's real
     ATLAS library) should be treated as approved, same as "alcista".
@@ -291,7 +304,10 @@ async def test_analyze_accepts_contracts_when_atlas_verdict_is_posicion():
     )
 
     service = AnalysisService(
-        alpha_provider=alpha, ibkr_provider=ibkr, atlas_provider=atlas
+        alpha_provider=alpha,
+        ibkr_provider=ibkr,
+        atlas_provider=atlas,
+        iv_history_repository=iv_history_repository,
     )
     service.scanner.scan_puts = AsyncMock(return_value=[option])
 

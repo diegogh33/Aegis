@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from datetime import date
+from statistics import median
+
 from app.engines.metrics_engine import MetricsEngine
 from app.engines.option_score_engine import OptionScoreEngine
+from app.iv_history.repository import IVHistoryRepository, IVSnapshot
 from app.models.analysis_result import AnalysisResult
 from app.models.company import Company
 from app.models.investment_candidate import InvestmentCandidate
@@ -24,6 +28,7 @@ class AnalysisService:
         alpha_provider: AlphaVantageProvider,
         ibkr_provider: IBKRProvider,
         atlas_provider: AtlasProvider | None = None,
+        iv_history_repository: IVHistoryRepository | None = None,
     ) -> None:
 
         self.alpha = alpha_provider
@@ -34,7 +39,18 @@ class AnalysisService:
 
         self.scorer = OptionScoreEngine()
 
-        self.strategy = CashSecuredPutStrategy()
+        if iv_history_repository is None:
+            from app.config.settings import Settings
+
+            iv_history_repository = IVHistoryRepository(
+                Settings().iv_history_db_path
+            )
+
+        self.iv_history = iv_history_repository
+
+        self.strategy = CashSecuredPutStrategy(
+            iv_history_repository=self.iv_history
+        )
 
     async def analyze(
         self,
@@ -81,6 +97,29 @@ class AnalysisService:
         contracts = await self.scanner.scan_puts(
             ticker, exchange=exchange, currency=currency
         )
+
+        # Se guarda un snapshot diario de IV para el histórico de
+        # IVRankRule. Se usa la mediana entre los contratos con IV
+        # disponible (más robusto que depender de un único strike,
+        # que puede no tener Greeks calculables - ver limitaciones de
+        # datos de IBKR ya documentadas). (ticker, día) es la clave
+        # natural: analizar el mismo ticker varias veces el mismo día
+        # sobreescribe el snapshot de hoy, no lo duplica.
+        available_ivs = [
+            contract.implied_volatility
+            for contract in contracts
+            if contract.implied_volatility is not None
+        ]
+
+        if available_ivs:
+
+            self.iv_history.record(
+                IVSnapshot(
+                    ticker=ticker,
+                    day=date.today(),
+                    implied_volatility=median(available_ivs),
+                )
+            )
 
         ranked: list[ScoredOption] = []
         rejected: list[RejectedContract] = []

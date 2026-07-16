@@ -1,10 +1,23 @@
 from datetime import date, timedelta
 from decimal import Decimal
 
+import pytest
+
+from app.iv_history.repository import IVHistoryRepository
 from app.models.company import Company
 from app.models.investment_candidate import InvestmentCandidate
 from app.models.investment_thesis import InvestmentThesis
 from app.models.option_contract import OptionContract
+
+
+@pytest.fixture
+def iv_history_repository(tmp_path) -> IVHistoryRepository:
+    """
+    An IVHistoryRepository backed by a temporary, per-test SQLite
+    file - tests should never read or write the real
+    data/iv_history.db.
+    """
+    return IVHistoryRepository(str(tmp_path / "iv_history.db"))
 
 
 def build_company(
@@ -57,6 +70,7 @@ def build_option(
     delta: Decimal | float | None = None,
     underlying: str = "SAP",
     dte: int = 45,
+    implied_volatility: Decimal | float | None = None,
 ) -> OptionContract:
     """
     Builds a minimal but fully-populated OptionContract for tests.
@@ -80,7 +94,11 @@ def build_option(
         gamma=None,
         theta=None,
         vega=None,
-        implied_volatility=None,
+        implied_volatility=(
+            None
+            if implied_volatility is None
+            else Decimal(str(implied_volatility))
+        ),
         volume=None,
         open_interest=None,
     )
@@ -92,6 +110,7 @@ def build_candidate(
     approved: bool = False,
     watchlist: bool = False,
     dte: int = 45,
+    implied_volatility: Decimal | float | None = None,
 ) -> InvestmentCandidate:
     """
     Builds a minimal but fully-populated InvestmentCandidate for tests.
@@ -99,5 +118,9 @@ def build_candidate(
     return InvestmentCandidate(
         company=build_company(next_earnings=next_earnings),
         thesis=InvestmentThesis(approved=approved, watchlist=watchlist),
-        option=build_option(delta=delta, dte=dte),
+        option=build_option(
+            delta=delta,
+            dte=dte,
+            implied_volatility=implied_volatility,
+        ),
     )

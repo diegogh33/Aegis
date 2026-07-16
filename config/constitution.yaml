@@ -54,6 +54,25 @@ cash_secured_put:
 
     minimum_annualized_return: 12
 
+  ivr:
+
+    # Umbrales reales del sistema de venta de primas de Diego
+    # (Sistema_Venta_Prima.md): IVR >= 30 aceptable, preferiblemente
+    # >= 40.
+    minimum: 30
+    preferred_minimum: 40
+
+    # Ventana de histórico sobre la que se calcula el rank (días).
+    lookback_days: 365
+
+    # Días mínimos de historial acumulado antes de que IVRankRule
+    # empiece a bloquear de verdad. Por debajo de esto, la regla pasa
+    # sin bloquear (no hay suficiente señal para confiar en el
+    # cálculo) - 90 días es un punto intermedio: cubre al menos un
+    # ciclo trimestral de earnings sin retrasar la utilidad de la
+    # regla tanto como exigir medio año o un año completo.
+    minimum_days_history: 90
+
   scoring:
 
     delta:

@@ -287,6 +287,46 @@ CLI / Dashboard
     correcto si se añaden/quitan reglas, como IVR más adelante), y
     `recommendation` ahora compara contra el 90%/75% de ese máximo
     real, no contra un número absoluto.
+-   **`IVRankRule` — séptima y última regla de la Constitution
+    original, cerrando el motor de reglas al completo.** Ninguno de
+    los 3 proveedores de datos (IBKR, Alpha Vantage, Massive Market
+    Data) da IV Rank de forma fiable — no es un dato que se pida
+    directamente, es un cálculo sobre histórico propio:
+    `(IV actual - IV mín en ventana) / (IV máx - IV mín) × 100`.
+    Nuevo paquete `app/iv_history/`:
+    -   `IVHistoryRepository` — SQLite local (`data/iv_history.db`,
+        excluido de git; solo `sqlite3` de la librería estándar, sin
+        dependencias nuevas), clave natural `(ticker, día)` —
+        analizar el mismo ticker varias veces el mismo día
+        sobreescribe el snapshot de ese día en vez de duplicarlo.
+    -   `calculate_iv_rank()` — cálculo puro, devuelve `rank=None`
+        (no un 0 o 100 engañoso) si no hay histórico suficiente, o
+        si el histórico es completamente plano (`max == min`,
+        división por cero evitada explícitamente).
+    -   `AnalysisService.analyze()` graba un snapshot diario
+        automáticamente en cada análisis (mediana de la IV entre los
+        contratos escaneados que sí la tengan — más robusto que
+        depender de un único strike, que puede no tener Greeks
+        calculables) — sin comando ni tarea programada aparte, a
+        petición de Diego.
+    -   `IVRankRule`: umbrales reales del sistema de venta de primas
+        de Diego (`Sistema_Venta_Prima.md`): `IVR ≥30` aceptable
+        (`WARNING`), `≥40` preferido (`PASS`). Exige
+        `minimum_days_history: 90` (constitution.yaml,
+        `cash_secured_put.ivr`) antes de bloquear de verdad — con
+        menos historial, pasa sin bloquear (`WARNING`, score
+        neutral) en vez de rechazar candidatos por un hueco de datos
+        que se resolverá solo con el tiempo. Mismo criterio con IV
+        ausente en el contrato.
+    -   **Bug real encontrado mientras se escribían los tests**:
+        `IVRankRule.evaluate()` multiplicaba `current_iv` por 100
+        antes de compararlo contra el histórico — pero el histórico
+        ya se guarda como fracción (igual que llega de IBKR, ej.
+        `0.47`), así que la comparación mezclaba escalas
+        (`current_iv` en 0-100, histórico en 0-1) y daba ranks sin
+        sentido (ej. IV=21% rankeando 100). Corregido: ambos se
+        comparan en fracción: `calculate_iv_rank()` ya normaliza
+        internamente a 0-100 en su propia fórmula.
 -   `config/constitution.yaml` ya contiene toda la configuración de
     reglas (delta, earnings, liquidez, spread, premium, pesos de
     scoring) — la configuración va por delante del código que la
@@ -657,16 +697,12 @@ CLI / Dashboard
     earnings, dividendos, splits...). Pendiente de implementar; no
     se ha tocado a ciegas sin poder validar el formato CSV real
     contra la API.
--   Queda 1 regla bloqueante por implementar de las 7 que define
-    `constitution.yaml`: `IVRankFilter` — bloqueado por falta de
-    histórico de IV fiable (ninguno de los 3 proveedores de datos da
-    IV Rank de forma consistente hoy, ver limitación más abajo). La
-    intención original era calcularlo internamente, persistiendo IV
-    diaria (~1 año) en Parquet o SQLite:
-    `(IV actual - IV mín) / (IV máx - IV mín)`. No implementado
-    todavía — requiere antes decidir dónde persistir el histórico y
-    acumular semanas/meses de datos antes de que el cálculo tenga
-    sentido.
+-   **`IVRankRule` implementada, pero necesita 90 días de histórico
+    acumulado antes de bloquear de verdad.** Hasta entonces, pasa sin
+    bloquear (`WARNING`) para cualquier ticker — el rank real
+    empezará a activarse por ticker a medida que se analicen con
+    regularidad y se acumulen snapshots diarios. No hay forma de
+    "rellenar" histórico retroactivo — solo se acumula con el uso.
 -   **Suscripción de opciones de IBKR contratada — error 10091
     resuelto, pero datos aún vacíos, causa pendiente de confirmar.**
     Se contrató el `US Equity and Options Add-On Streaming Bundle`
@@ -709,6 +745,9 @@ app/
     engines/
         metrics_engine.py
         option_score_engine.py
+    iv_history/
+        repository.py
+        rank.py
     mcp/
     models/
         company.py
@@ -728,6 +767,7 @@ app/
         base.py
         delta.py
         dte.py
+        ivr.py
         liquidity.py
         no_earnings.py
         spread.py
@@ -746,6 +786,9 @@ tests/
     engines/
         test_metrics_engine.py
         test_option_score_engine.py
+    iv_history/
+        test_repository.py
+        test_rank.py
     providers/
         test_market_data.py
         test_dte_window.py
@@ -763,6 +806,7 @@ tests/
         test_dte_rule.py
         test_liquidity_rule.py
         test_spread_rule.py
+        test_ivr_rule.py
     services/
         test_analysis_service.py
         test_option_scanner.py
@@ -1015,7 +1059,11 @@ consultar ATLAS sin toparse con el rate-limit de 60 peticiones/hora
 sin autenticar de la API de GitHub — funciona sin él porque el repo es
 público, pero cualquier otro tráfico desde la misma IP puede agotarlo.
 `ATLAS_REPO` (por defecto `diegogh33/atlas-research`) permite apuntar
-a otro repo de análisis si hiciera falta.
+a otro repo de análisis si hiciera falta. `IV_HISTORY_DB_PATH` (por
+defecto `data/iv_history.db`) permite cambiar dónde se guarda el
+histórico local de IV usado por `IVRankRule` — el fichero se crea
+solo si no existe, y no está versionado en git (es histórico
+específico de cada máquina).
 
 ``` bash
 uv run python -m app.main AAPL
@@ -1067,8 +1115,10 @@ de dar un cambio por terminado.
 -   [x] `LiquidityRule` y `SpreadRule` implementadas y conectadas
         (leen de `constitution.yaml`); `LiquidityFilter` (servicio,
         con umbrales que no coincidían con el YAML) eliminado.
--   [ ] Implementar la regla de Constitution que falta (IVR —
-        bloqueado por falta de histórico de IV fiable).
+-   [x] Implementar la regla de Constitution que faltaba (`IVRankRule`
+        — las 7 reglas originales de la Constitution ya están
+        implementadas y conectadas). Necesita 90 días de histórico
+        por ticker antes de bloquear de verdad.
 -   [x] Unificar `DeltaRule`/`NoUpcomingEarningsRule` para que lean
         `constitution.yaml` igual que las demás reglas, en vez de
         tener umbrales hardcodeados.

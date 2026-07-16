@@ -31,3 +31,7 @@ htmlcov/
 # Build
 dist/
 build/
+
+# Local data (IV history database, etc.) - per-machine, not versioned
+data/*.db
+data/*.db-journal

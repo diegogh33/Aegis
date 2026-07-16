@@ -1,6 +1,8 @@
+from app.iv_history.repository import IVHistoryRepository
 from app.rules.company.company_approved_rule import CompanyApprovedRule
 from app.rules.delta import DeltaRule
 from app.rules.dte import DTERule
+from app.rules.ivr import IVRankRule
 from app.rules.liquidity import LiquidityRule
 from app.rules.no_earnings import NoUpcomingEarningsRule
 from app.rules.spread import SpreadRule
@@ -12,7 +14,10 @@ class CashSecuredPutStrategy(Strategy):
     Strategy for evaluating Cash Secured PUT opportunities.
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        iv_history_repository: IVHistoryRepository | None = None,
+    ):
         super().__init__(
             rules=[
                 CompanyApprovedRule(),
@@ -21,5 +26,6 @@ class CashSecuredPutStrategy(Strategy):
                 DeltaRule(),
                 LiquidityRule(),
                 SpreadRule(),
+                IVRankRule(repository=iv_history_repository),
             ]
         )

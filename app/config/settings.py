@@ -83,6 +83,16 @@ class Settings:
             "diegogh33/atlas-research",
         )
 
+        #
+        # IV history (used by IVRankRule) - a local SQLite database,
+        # not a remote service, so this is just a file path.
+        #
+
+        self.iv_history_db_path = os.getenv(
+            "IV_HISTORY_DB_PATH",
+            "data/iv_history.db",
+        )
+
     def get(
         self,
         *keys: str,
