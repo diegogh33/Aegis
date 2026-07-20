@@ -113,6 +113,30 @@ def _closest_to_target_delta(
     )[:limit]
 
 
+def _select_option_chain(chains: list, symbol: str):
+    """
+    Selects which OptionChain (from reqSecDefOptParamsAsync's result)
+    to use for a symbol.
+
+    reqSecDefOptParamsAsync can return more than one chain under
+    exchange="SMART" for the same underlying - e.g. a secondary/
+    special option class alongside the standard one (confirmed with
+    MSFT, which returned a "2MSFT" tradingClass with only one
+    expiration and a handful of strikes, contaminating results when
+    no tradingClass was pinned downstream). Prefers the chain whose
+    tradingClass matches the underlying symbol exactly - the standard
+    class - falling back to the first SMART chain, then the first
+    chain of any exchange, if no exact match exists.
+    """
+
+    smart_chains = [c for c in chains if c.exchange == "SMART"]
+
+    return next(
+        (c for c in smart_chains if c.tradingClass == symbol),
+        smart_chains[0] if smart_chains else chains[0],
+    )
+
+
 class IBKRProvider:
     """
     Wrapper around the Interactive Brokers API.
@@ -190,25 +214,24 @@ class IBKRProvider:
         if not chains:
             raise ValueError(f"No option chain found for {symbol}")
 
-        chain = next(
-            (c for c in chains if c.exchange == "SMART"),
-            chains[0],
-        )
+        chain = _select_option_chain(chains, symbol)
 
         expirations = sorted(chain.expirations)
 
         logger.debug(
-            "{symbol}: {count} expirations available on {exchange}: "
-            "{expirations}",
+            "{symbol}: {count} expirations available on {exchange} "
+            "(tradingClass={trading_class}): {expirations}",
             symbol=symbol,
             count=len(expirations),
             exchange=chain.exchange,
+            trading_class=chain.tradingClass,
             expirations=", ".join(expirations),
         )
 
         return {
             "contract": stock_contract,
             "exchange": chain.exchange,
+            "trading_class": chain.tradingClass,
             "expirations": sorted(chain.expirations),
             "strikes": sorted(chain.strikes),
         }
@@ -328,6 +351,7 @@ class IBKRProvider:
                 right="P",
                 exchange=chain["exchange"],
                 currency=currency,
+                tradingClass=chain["trading_class"],
             )
 
             details = await self.ib.reqContractDetailsAsync(option)

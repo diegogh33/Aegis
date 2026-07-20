@@ -725,6 +725,25 @@ CLI / Dashboard
     contrato deja un log `DEBUG` propio, permitiendo comparar
     directamente los deltas calculados por Aegis contra la cadena
     real (ej. en TWS) sin necesidad de instrumentación manual.
+-   **`tradingClass` fijado explícitamente al pedir contratos —
+    corrige cadenas de opciones contaminadas con clases secundarias
+    (confirmado con MSFT).** Probando `--long-term` con MSFT, la
+    cadena solo devolvía 3 vencimientos (normal en MSFT: decenas) y
+    aparecía un contrato con símbolo `2MSFT` en vez de `MSFT`, con un
+    único vencimiento y pocos strikes disponibles.
+    `reqSecDefOptParamsAsync()` puede devolver **más de una cadena**
+    bajo `exchange="SMART"` para el mismo subyacente — la clase
+    estándar (`tradingClass == símbolo`) junto a una clase secundaria
+    o especial — y el código se quedaba con la primera que
+    encontraba, sin comprobar `tradingClass`, así que en ocasiones
+    cogía la clase equivocada. Nueva función pura
+    `_select_option_chain()`: prioriza la cadena cuyo `tradingClass`
+    coincide exactamente con el símbolo, con fallback a la primera
+    de `SMART` y después a la primera de cualquier exchange si no
+    hay coincidencia exacta. El `tradingClass` elegido se fija
+    explícitamente en el `Option()` construido para pedir detalles
+    de cada contrato (antes no se especificaba en absoluto), evitando
+    que se mezclen clases distintas en los resultados.
 
 ## Lo que NO funciona todavía / limitaciones conocidas
 
@@ -848,6 +867,7 @@ tests/
         test_dte_window.py
         test_closest_strikes.py
         test_greeks_estimate.py
+        test_option_chain_selection.py
         test_alphavantage_mapper.py
         atlas/
             test_mapper.py
