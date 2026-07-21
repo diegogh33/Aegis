@@ -216,6 +216,19 @@ class MarketDataProvider:
         if greeks is None:
             greeks, greeks_source = _select_greeks(ticker)
 
+        # openInterest updates once at session start rather than
+        # tick-by-tick, so it can take longer than the 2-second wait
+        # in _request_ticker to arrive - poll briefly if it's missing
+        # despite having a valid price.
+        if _has_any_price(ticker) and math.isnan(ticker.openInterest):
+
+            for _ in range(4):
+
+                await asyncio.sleep(0.5)
+
+                if not math.isnan(ticker.openInterest):
+                    break
+
         if not _has_any_price(ticker):
             logger.debug(
                 "No market data for {symbol} (marketDataType={type}), "
