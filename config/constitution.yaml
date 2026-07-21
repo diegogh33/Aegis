@@ -131,3 +131,18 @@ long_term_put:
   liquidity:
     minimum_volume: 0
     minimum_open_interest: 100
+watchlist:
+
+  # Tickers excluidos del watchlist automático (sin argumentos).
+  # Útil para acciones estables con primas bajas que no merecen
+  # el tiempo de análisis (ej. PG, DEO), o ADRs sin mercado de
+  # opciones (ej. KRKNF), o tickers europeos que dan error
+  # sistemático (ej. MC.PA, WKL, LOG.MC).
+  # No aplica cuando se pasan tickers explícitamente.
+  exclude:
+    - KRKNF
+    - MC.PA
+    - WKL
+    - LOG.MC
+    - PG
+    - DEO

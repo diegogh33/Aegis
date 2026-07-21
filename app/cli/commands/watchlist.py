@@ -6,9 +6,9 @@ from typing import Optional
 
 import typer
 from rich.console import Console
-from rich.table import Table
 
-from app.cli.shared import TickerSummary, build_summary
+from app.cli.shared import TickerSummary, build_summary, print_summary_table
+from app.config.settings import Settings
 from app.models.analysis_result import AnalysisResult
 from app.providers.alphavantage.provider import AlphaVantageProvider
 from app.providers.atlas.provider import AtlasProvider
@@ -19,11 +19,8 @@ console = Console()
 
 # A ticker is eligible for analysis if its current price is at or
 # below buy_price * (1 + PRICE_MARGIN). Confirmed with Diego:
-# 10% above entrada_max is the threshold - beyond that, the stock
-# isn't in or near the buy zone and there's no point scanning options.
+# 10% above entrada_max is the threshold.
 PRICE_MARGIN = Decimal("0.10")
-
-
 
 
 def watchlist(
@@ -38,14 +35,12 @@ def watchlist(
     Analyzes multiple tickers and shows a summary table.
 
     Without arguments: analyzes all tickers in ATLAS (alcista,
-    posicion, seguimiento), approved ones first. Tickers whose current
-    price is more than 10% above their ATLAS buy-zone ceiling
-    (entrada_max) are skipped automatically - no point scanning options
-    for a stock that isn't near its buy zone.
+    posicion, seguimiento), approved ones first. Applies two automatic
+    filters: tickers in watchlist.exclude (constitution.yaml) are
+    skipped, and tickers whose price is more than 10% above their
+    ATLAS buy-zone ceiling are also skipped.
 
-    With tickers: analyzes exactly those tickers, regardless of
-    whether they exist in ATLAS. Tickers without an ATLAS entry (no
-    entrada_max) are always analyzed.
+    With tickers: analyzes exactly those tickers without any filters.
 
     Combinable with --long-term and --currency EUR.
     """
@@ -87,8 +82,22 @@ async def _watchlist(
             atlas_provider=atlas,
         )
 
+        # Filters only apply to the automatic ATLAS scan.
+        apply_filters = not bool(tickers)
+
+        # Load exclude list from constitution.yaml (only for auto scan)
+        excluded: set[str] = set()
+        if apply_filters:
+            settings = Settings()
+            try:
+                excluded = set(
+                    t.upper()
+                    for t in settings.get("watchlist", "exclude")
+                )
+            except Exception:
+                pass  # section not present — no exclusions
+
         # Build the list of tickers and their ATLAS metadata.
-        # buy_price_map holds entrada_max per ticker (None = no ceiling).
         if tickers:
             ticker_list = [t.upper() for t in tickers]
             atlas_map: dict[str, str | None] = {}
@@ -114,11 +123,6 @@ async def _watchlist(
                 for e in all_entries
             }
 
-        # Price filter only applies when scanning ATLAS automatically
-        # (no explicit tickers). When the user passes tickers
-        # explicitly, they've already decided to analyze them.
-        apply_price_filter = not bool(tickers)
-
         if not ticker_list:
             console.print(
                 "[yellow]No tickers found. Add analyses to your ATLAS "
@@ -132,6 +136,7 @@ async def _watchlist(
 
         summaries: list[TickerSummary] = []
         skipped = 0
+        errors = 0
 
         for i, ticker in enumerate(ticker_list, 1):
 
@@ -142,13 +147,16 @@ async def _watchlist(
             if valoracion:
                 label += f" ({valoracion})"
 
-            # Price filter: if we have a buy_price ceiling from ATLAS,
-            # fetch the current stock price first (one lightweight
-            # request) and skip immediately if the stock is more than
-            # PRICE_MARGIN above that ceiling. This avoids burning
-            # dozens of IBKR option-chain requests on tickers that
-            # aren't near their buy zone.
-            if apply_price_filter and buy_price is not None:
+            # Exclude list filter
+            if apply_filters and ticker in excluded:
+                console.print(
+                    f"  {label}... [dim]excluded (watchlist.exclude)[/]"
+                )
+                skipped += 1
+                continue
+
+            # Price filter
+            if apply_filters and buy_price is not None:
 
                 current_price = await ibkr.get_underlying_price(
                     ticker,
@@ -185,74 +193,16 @@ async def _watchlist(
                     if result.contracts
                     else "[dim]no candidates[/]"
                 )
+                summaries.append(summary)
 
             except Exception as exc:
-                summary = TickerSummary(
-                    ticker=ticker,
-                    atlas_valoracion=valoracion,
-                    candidates=0,
-                    best_score=None,
-                    best_strike=None,
-                    best_expiration=None,
-                    best_otm_pct=None,
-                    top_rejection=f"ERROR: {exc}",
-                )
+                # Errors (no option chain, can't qualify contract, etc.)
+                # are shown inline but excluded from the summary table —
+                # they don't represent a real analysis result.
                 console.print(f"[red]error: {exc}[/]")
+                errors += 1
 
-            summaries.append(summary)
-
-        # Summary table — only shows tickers that were actually analyzed
-        console.print()
-        console.rule("[bold]Summary[/]")
-        console.print()
-
-        if summaries:
-
-            summary_table = Table(
-                title=(
-                    "Watchlist — Long-Term Candidates"
-                    if long_term
-                    else "Watchlist — Best PUT Candidates"
-                )
-            )
-
-            summary_table.add_column("Ticker", style="bold")
-            summary_table.add_column("ATLAS")
-            summary_table.add_column("Candidates", justify="right")
-            summary_table.add_column("Best Score", justify="right")
-            summary_table.add_column("Best Strike", justify="right")
-            summary_table.add_column("OTM%", justify="right")
-            summary_table.add_column("Expiration")
-            summary_table.add_column("Notes")
-
-            for s in summaries:
-
-                atlas_cell = s.atlas_valoracion or "-"
-
-                if s.candidates > 0:
-                    summary_table.add_row(
-                        s.ticker,
-                        atlas_cell,
-                        str(s.candidates),
-                        f"{s.best_score:.1f}",
-                        s.best_strike or "-",
-                        s.best_otm_pct or "-",
-                        s.best_expiration or "-",
-                        "",
-                    )
-                else:
-                    summary_table.add_row(
-                        f"[dim]{s.ticker}[/]",
-                        f"[dim]{atlas_cell}[/]",
-                        "[dim]0[/]",
-                        "[dim]-[/]",
-                        "[dim]-[/]",
-                        "[dim]-[/]",
-                        "[dim]-[/]",
-                        f"[dim]{s.top_rejection or ''}[/]",
-                    )
-
-            console.print(summary_table)
+        print_summary_table(summaries, long_term)
 
         with_candidates = [s for s in summaries if s.candidates > 0]
         analyzed = len(summaries)
@@ -263,8 +213,13 @@ async def _watchlist(
         )
         if skipped:
             console.print(
-                f"[dim]{skipped} ticker(s) skipped — price more than "
-                f"{int(PRICE_MARGIN * 100)}% above ATLAS buy zone.[/]"
+                f"[dim]{skipped} ticker(s) skipped (excluded or above "
+                f"buy zone).[/]"
+            )
+        if errors:
+            console.print(
+                f"[dim]{errors} ticker(s) errored (no options chain or "
+                f"contract qualification failed — see log above).[/]"
             )
 
     finally:
@@ -272,3 +227,4 @@ async def _watchlist(
         await alpha.close()
         await ibkr.disconnect()
         await atlas.close()
+
