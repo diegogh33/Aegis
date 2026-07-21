@@ -796,3 +796,37 @@ solo debe indicar qué opción vender, sino explicar por qué, cuantificar
 el riesgo, comparar alternativas y validar que cada decisión cumple las
 reglas definidas por el usuario. La prioridad es construir una base
 sólida, mantenible y respaldada por pruebas automáticas.
+
+------------------------------------------------------------------------
+
+# Cómo retomar el proyecto en una conversación nueva con Claude
+
+Si esta conversación llega a su límite o simplemente abres una sesión
+nueva, usa este mensaje inicial para que Claude se ponga al día
+inmediatamente sin perder contexto:
+
+---
+
+> Estoy trabajando en Aegis, mi plataforma de análisis de opciones CSP
+> en Python. El repo es `diegogh33/Aegis`, rama `fuckyouchatgpt`. Lee
+> el README actualizado para ponerte al día del estado actual del
+> proyecto — está en la sección 'Lo que funciona hoy'. También tengo
+> mis notas en el fichero de memoria de esta cuenta. Quiero continuar
+> desde donde lo dejamos.
+
+---
+
+Claude leerá el README (sección "Lo que funciona hoy"), consultará la
+memoria de la cuenta donde está el contexto de Aegis, y estará listo
+para continuar sin que tengas que re-explicar nada.
+
+## Pendientes al cierre de la última sesión (21-jul-2026)
+
+-   Probar `watchlist` completo con mercado US abierto (15:30-22:00
+    Madrid) — solo se ha probado con mercado cerrado hasta ahora.
+-   Confirmar que `open_interest` llega correctamente con el nuevo
+    generic tick 101 añadido — posible que solo funcione en tiempo real.
+-   Confirmar que `--long-term` funciona bien con datos en tiempo real
+    (AAPL, ACN u otro valor de ATLAS aprobado).
+-   Recordar siempre probar con mercado US abierto antes de dar algo
+    por resuelto — Diego lo pidió explícitamente y sigue vigente.
