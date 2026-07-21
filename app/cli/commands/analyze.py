@@ -258,7 +258,13 @@ async def _multi(
             result = await service.analyze(
                 ticker, exchange=exchange, currency=currency, long_term=long_term
             )
-            summary = build_summary(ticker, None, result)
+            thesis = result.thesis
+            atlas_val = (
+                "alcista" if thesis.approved
+                else "seguimiento" if thesis.watchlist
+                else None
+            )
+            summary = build_summary(ticker, atlas_val, result)
             console.print(
                 f"[green]{summary.candidates} candidate(s)[/]"
                 if summary.candidates > 0

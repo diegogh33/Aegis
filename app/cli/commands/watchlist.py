@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from collections import Counter
 from decimal import Decimal
 from typing import Optional
 
@@ -9,7 +8,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from app.cli.shared import TickerSummary
+from app.cli.shared import TickerSummary, build_summary
 from app.models.analysis_result import AnalysisResult
 from app.providers.alphavantage.provider import AlphaVantageProvider
 from app.providers.atlas.provider import AtlasProvider
@@ -180,59 +179,12 @@ async def _watchlist(
                     long_term=long_term,
                 )
 
-                if result.contracts:
-
-                    best = result.contracts[0]
-                    option = best.option
-
-                    if (
-                        option.underlying_price is not None
-                        and option.underlying_price > 0
-                    ):
-                        diff = option.underlying_price - option.strike
-                        otm_pct_val = diff / option.underlying_price * 100
-                        otm_str = (
-                            f"{otm_pct_val:.1f}% OTM"
-                            if otm_pct_val >= 0
-                            else f"{abs(otm_pct_val):.1f}% ITM"
-                        )
-                    else:
-                        otm_str = None
-
-                    summary = TickerSummary(
-                        ticker=ticker,
-                        atlas_valoracion=valoracion,
-                        candidates=len(result.contracts),
-                        best_score=float(best.score.total),
-                        best_strike=str(option.strike),
-                        best_expiration=str(option.expiration),
-                        best_otm_pct=otm_str,
-                        top_rejection=None,
-                    )
-                    console.print(
-                        f"[green]{len(result.contracts)} candidate(s)[/]"
-                    )
-
-                else:
-
-                    top_reason = None
-                    if result.rejected:
-                        counts = Counter(
-                            r.reason for r in result.rejected
-                        )
-                        top_reason = counts.most_common(1)[0][0]
-
-                    summary = TickerSummary(
-                        ticker=ticker,
-                        atlas_valoracion=valoracion,
-                        candidates=0,
-                        best_score=None,
-                        best_strike=None,
-                        best_expiration=None,
-                        best_otm_pct=None,
-                        top_rejection=top_reason,
-                    )
-                    console.print("[dim]no candidates[/]")
+                summary = build_summary(ticker, valoracion, result)
+                console.print(
+                    f"[green]{len(result.contracts)} candidate(s)[/]"
+                    if result.contracts
+                    else "[dim]no candidates[/]"
+                )
 
             except Exception as exc:
                 summary = TickerSummary(
