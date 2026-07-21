@@ -14,10 +14,13 @@ from app.providers.ibkr.greeks_estimate import estimate_put_delta
 from app.providers.ibkr.mapper import IBKRMapper
 from app.providers.ibkr.market_data import MarketDataProvider
 
-# ib_async prints "tickSize: Unknown reqId: N" to stdout when it
-# receives a tick type it doesn't recognise (happens with generic
-# tick 101 / putOpenInterest on some contracts). Suppress it.
-logging.getLogger("ib_async").setLevel(logging.ERROR)
+# ib_async prints "tickSize: Unknown reqId: N" and
+# "tickOptionComputation: Unknown reqId: N" to the console when it
+# receives tick types it doesn't recognise (happens with generic
+# tick 101 / putOpenInterest on some contracts). Suppress both the
+# top-level logger and the wrapper-specific one where these originate.
+logging.getLogger("ib_async").setLevel(logging.CRITICAL)
+logging.getLogger("ib_async.wrapper").setLevel(logging.CRITICAL)
 
 
 def _as_single_contract(
