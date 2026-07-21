@@ -133,6 +133,7 @@ async def _analyze(
 
         options.add_column("Score", justify="right")
         options.add_column("Strike", justify="right")
+        options.add_column("OTM%", justify="right")
         options.add_column("Expiration")
         options.add_column("Bid", justify="right")
         options.add_column("Ask", justify="right")
@@ -146,9 +147,23 @@ async def _analyze(
             option = scored.option
             score = scored.score
 
+            if (
+                option.underlying_price is not None
+                and option.underlying_price > 0
+            ):
+                diff = option.underlying_price - option.strike
+                otm_pct = diff / option.underlying_price * 100
+                if otm_pct >= 0:
+                    otm_str = f"{otm_pct:.1f}% OTM"
+                else:
+                    otm_str = f"{abs(otm_pct):.1f}% ITM"
+            else:
+                otm_str = "-"
+
             options.add_row(
                 f"{score.total:.1f}",
                 str(option.strike),
+                otm_str,
                 str(option.expiration),
                 "-" if option.bid is None else f"{option.bid:.2f}",
                 "-" if option.ask is None else f"{option.ask:.2f}",
