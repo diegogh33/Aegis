@@ -125,6 +125,11 @@ async def _watchlist(
                 for e in all_entries
             }
 
+        # Price filter only applies when scanning ATLAS automatically
+        # (no explicit tickers). When the user passes tickers
+        # explicitly, they've already decided to analyze them.
+        apply_price_filter = not bool(tickers)
+
         if not ticker_list:
             console.print(
                 "[yellow]No tickers found. Add analyses to your ATLAS "
@@ -154,7 +159,7 @@ async def _watchlist(
             # PRICE_MARGIN above that ceiling. This avoids burning
             # dozens of IBKR option-chain requests on tickers that
             # aren't near their buy zone.
-            if buy_price is not None:
+            if apply_price_filter and buy_price is not None:
 
                 current_price = await ibkr.get_underlying_price(
                     ticker,
