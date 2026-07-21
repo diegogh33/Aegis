@@ -65,6 +65,26 @@ class AtlasProvider:
 
         return self._index.get(ticker.strip().upper())
 
+    async def get_all_entries(self) -> list[AtlasEntry]:
+        """
+        Returns all entries in the ATLAS library, sorted by conviction:
+        alcista/posicion first (approved), then seguimiento (watchlist).
+        Within each group, sorted alphabetically by ticker.
+        """
+
+        if self._index is None:
+            self._index = await self._build_index()
+
+        _APPROVED = {"alcista", "posicion"}
+
+        return sorted(
+            self._index.values(),
+            key=lambda e: (
+                0 if e.valoracion in _APPROVED else 1,
+                e.ticker,
+            ),
+        )
+
     async def close(self) -> None:
 
         await self._client.close()
