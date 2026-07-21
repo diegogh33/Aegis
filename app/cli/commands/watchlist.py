@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from collections import Counter
-from dataclasses import dataclass
 from decimal import Decimal
 from typing import Optional
 
@@ -10,6 +9,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from app.cli.shared import TickerSummary
 from app.models.analysis_result import AnalysisResult
 from app.providers.alphavantage.provider import AlphaVantageProvider
 from app.providers.atlas.provider import AtlasProvider
@@ -25,16 +25,6 @@ console = Console()
 PRICE_MARGIN = Decimal("0.10")
 
 
-@dataclass
-class TickerSummary:
-    ticker: str
-    atlas_valoracion: str | None
-    candidates: int
-    best_score: float | None
-    best_strike: str | None
-    best_expiration: str | None
-    best_otm_pct: str | None
-    top_rejection: str | None
 
 
 def watchlist(

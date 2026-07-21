@@ -6,36 +6,41 @@ from collections import Counter
 from rich.console import Console
 from rich.table import Table
 
+from app.cli.shared import TickerSummary, build_summary, print_summary_table
 from app.providers.alphavantage.provider import AlphaVantageProvider
 from app.providers.atlas.provider import AtlasProvider
 from app.providers.ibkr.provider import IBKRProvider
 from app.services.analysis_service import AnalysisService
 
+import typer
+
 console = Console()
 
 
 def analyze(
-    ticker: str,
+    tickers: list[str] = typer.Argument(
+        ...,
+        help="One or more tickers to analyze.",
+    ),
     exchange: str = "SMART",
     currency: str = "USD",
     long_term: bool = False,
 ) -> None:
     """
-    Analyzes a ticker's Cash Secured Put candidates.
+    Analyzes one or more tickers for Cash Secured PUT candidates.
 
-    For non-US underlyings (e.g. Spanish stocks on MEFF), pass
-    --currency EUR. --exchange usually stays "SMART" (IBKR's
-    SmartRouting finds the right market) unless a specific routing
-    is needed.
+    Single ticker: shows the full detailed table (Company, candidates,
+    rejected contracts).
+
+    Multiple tickers: shows a compact summary table, one row per
+    ticker, with the best candidate for each.
 
     --long-term switches to the opportunistic long-dated PUT strategy
-    (90-365 DTE, wider/lower delta range) instead of the recurring
-    30-45 DTE strategy - for high-conviction price dips where being
-    assigned shares at the strike is itself an attractive outcome.
+    (90-365 DTE). --currency EUR for European underlyings.
     """
     asyncio.run(
         _analyze(
-            ticker,
+            tickers=tickers,
             exchange=exchange,
             currency=currency,
             long_term=long_term,
@@ -44,7 +49,10 @@ def analyze(
 
 
 async def _analyze(
-    ticker: str, exchange: str, currency: str, long_term: bool
+    tickers: list[str],
+    exchange: str,
+    currency: str,
+    long_term: bool,
 ) -> None:
 
     alpha = AlphaVantageProvider()
@@ -61,9 +69,7 @@ async def _analyze(
             )
 
         console.print("[bold]Connecting to IBKR...[/]")
-
         await ibkr.connect()
-
         console.print("[green]✓ Connected[/]")
 
         service = AnalysisService(
@@ -72,165 +78,10 @@ async def _analyze(
             atlas_provider=atlas,
         )
 
-        result = await service.analyze(
-            ticker,
-            exchange=exchange,
-            currency=currency,
-            long_term=long_term,
-        )
-
-        company = result.company
-        thesis = result.thesis
-
-        if result.company_known:
-
-            company_table = Table(title="Company")
-
-            company_table.add_column("Field")
-            company_table.add_column("Value")
-
-            company_table.add_row("Name", company.name)
-            company_table.add_row("Ticker", company.symbol)
-            company_table.add_row("Exchange", company.exchange)
-            company_table.add_row("Sector", company.sector)
-            company_table.add_row("Industry", company.industry)
-            company_table.add_row("Market Cap", f"{company.market_cap:,}")
-
-            if thesis.buy_price is not None:
-                company_table.add_row(
-                    "Max Entry",
-                    f"${thesis.buy_price:,.2f}",
-                )
-            if thesis.zona_compra is not None:
-                company_table.add_row(
-                    "Buy Zone",
-                    thesis.zona_compra,
-                )
-
-            console.print()
-            console.print(company_table)
-
+        if len(tickers) == 1:
+            await _single(tickers[0], exchange, currency, long_term, service)
         else:
-
-            console.print(
-                f"\n[bold yellow]⚠ {result.company_error}[/] "
-                f"Continuing with the options analysis, which doesn't "
-                f"depend on this."
-            )
-
-        if thesis.watchlist:
-            console.print(
-                f"\n[bold yellow]⚠ '{ticker}' is on the ATLAS watchlist "
-                f"(seguimiento) - not yet an approved investment.[/] "
-                f"Candidates below are shown, but scored lower and "
-                f"capped below STRONG_BUY/BUY."
-            )
-        elif not thesis.approved:
-            console.print(
-                f"\n[bold yellow]⚠ '{ticker}' has not been analyzed in "
-                f"ATLAS yet.[/] Candidates below are shown, but scored "
-                f"lower and capped below STRONG_BUY/BUY until it has a "
-                f"recorded investment thesis."
-            )
-
-        options = Table(
-            title=(
-                "Best Long-Term PUT Candidates"
-                if long_term
-                else "Best PUT Candidates"
-            )
-        )
-
-        options.add_column("Score", justify="right")
-        options.add_column("Strike", justify="right")
-        options.add_column("OTM%", justify="right")
-        options.add_column("vs Buy Zone", justify="right")
-        options.add_column("Expiration")
-        options.add_column("Bid", justify="right")
-        options.add_column("Ask", justify="right")
-        options.add_column("Delta", justify="right")
-        options.add_column("IV", justify="right")
-        options.add_column("Open Int", justify="right")
-        options.add_column("Recommendation")
-
-        for scored in result.contracts:
-
-            option = scored.option
-            score = scored.score
-
-            if (
-                option.underlying_price is not None
-                and option.underlying_price > 0
-            ):
-                diff = option.underlying_price - option.strike
-                otm_pct = diff / option.underlying_price * 100
-                if otm_pct >= 0:
-                    otm_str = f"{otm_pct:.1f}% OTM"
-                else:
-                    otm_str = f"{abs(otm_pct):.1f}% ITM"
-            else:
-                otm_str = "-"
-
-            if thesis.buy_price is not None and thesis.buy_price > 0:
-                vs_pct = (
-                    (thesis.buy_price - option.strike)
-                    / thesis.buy_price
-                    * 100
-                )
-                if vs_pct >= 0:
-                    vs_str = f"{vs_pct:.1f}% below"
-                else:
-                    vs_str = f"[bold red]{abs(vs_pct):.1f}% above[/]"
-            else:
-                vs_str = "-"
-
-            options.add_row(
-                f"{score.total:.1f}",
-                str(option.strike),
-                otm_str,
-                vs_str,
-                str(option.expiration),
-                "-" if option.bid is None else f"{option.bid:.2f}",
-                "-" if option.ask is None else f"{option.ask:.2f}",
-                "-" if option.delta is None else f"{option.delta:.3f}",
-                "-" if option.implied_volatility is None else f"{option.implied_volatility:.2%}",
-                "-" if option.open_interest is None else str(option.open_interest),
-                scored.evaluation.recommendation.value,
-            )
-
-        console.print()
-        console.print(options)
-
-        if result.rejected:
-
-            reasons = Counter(item.reason for item in result.rejected)
-
-            example_detail = {
-                item.reason: item.detail for item in result.rejected
-            }
-
-            rejected_table = Table(title="Rejected Contracts")
-
-            rejected_table.add_column("Reason")
-            rejected_table.add_column("Count", justify="right")
-            rejected_table.add_column("Example")
-
-            for reason, count in reasons.most_common():
-                rejected_table.add_row(
-                    reason,
-                    str(count),
-                    example_detail[reason],
-                )
-
-            console.print()
-            console.print(rejected_table)
-
-        if not result.contracts:
-            console.print(
-                "\n[bold yellow]No candidates passed the Constitution "
-                "or had usable market data.[/] See 'Rejected Contracts' "
-                "above for why."
-            )
+            await _multi(tickers, exchange, currency, long_term, service)
 
         console.print("\n[bold green]Analysis completed[/]")
 
@@ -239,3 +90,193 @@ async def _analyze(
         await alpha.close()
         await ibkr.disconnect()
         await atlas.close()
+
+
+async def _single(
+    ticker: str,
+    exchange: str,
+    currency: str,
+    long_term: bool,
+    service: AnalysisService,
+) -> None:
+
+    result = await service.analyze(
+        ticker, exchange=exchange, currency=currency, long_term=long_term
+    )
+
+    company = result.company
+    thesis = result.thesis
+
+    if result.company_known:
+
+        company_table = Table(title="Company")
+        company_table.add_column("Field")
+        company_table.add_column("Value")
+        company_table.add_row("Name", company.name)
+        company_table.add_row("Ticker", company.symbol)
+        company_table.add_row("Exchange", company.exchange)
+        company_table.add_row("Sector", company.sector)
+        company_table.add_row("Industry", company.industry)
+        company_table.add_row("Market Cap", f"{company.market_cap:,}")
+        if thesis.buy_price is not None:
+            company_table.add_row("Max Entry", f"${thesis.buy_price:,.2f}")
+        if thesis.zona_compra is not None:
+            company_table.add_row("Buy Zone", thesis.zona_compra)
+
+        console.print()
+        console.print(company_table)
+
+    else:
+
+        console.print(
+            f"\n[bold yellow]⚠ {result.company_error}[/] "
+            f"Continuing with the options analysis, which doesn't "
+            f"depend on this."
+        )
+
+    if thesis.watchlist:
+        console.print(
+            f"\n[bold yellow]⚠ '{ticker}' is on the ATLAS watchlist "
+            f"(seguimiento) - not yet an approved investment.[/] "
+            f"Candidates below are shown, but scored lower and "
+            f"capped below STRONG_BUY/BUY."
+        )
+    elif not thesis.approved:
+        console.print(
+            f"\n[bold yellow]⚠ '{ticker}' has not been analyzed in "
+            f"ATLAS yet.[/] Candidates below are shown, but scored "
+            f"lower and capped below STRONG_BUY/BUY until it has a "
+            f"recorded investment thesis."
+        )
+
+    options = Table(
+        title=(
+            "Best Long-Term PUT Candidates"
+            if long_term
+            else "Best PUT Candidates"
+        )
+    )
+
+    options.add_column("Score", justify="right")
+    options.add_column("Strike", justify="right")
+    options.add_column("OTM%", justify="right")
+    options.add_column("vs Buy Zone", justify="right")
+    options.add_column("Expiration")
+    options.add_column("Bid", justify="right")
+    options.add_column("Ask", justify="right")
+    options.add_column("Delta", justify="right")
+    options.add_column("IV", justify="right")
+    options.add_column("Open Int", justify="right")
+    options.add_column("Recommendation")
+
+    for scored in result.contracts:
+
+        option = scored.option
+        score = scored.score
+
+        if option.underlying_price is not None and option.underlying_price > 0:
+            diff = option.underlying_price - option.strike
+            otm_pct = diff / option.underlying_price * 100
+            otm_str = (
+                f"{otm_pct:.1f}% OTM"
+                if otm_pct >= 0
+                else f"{abs(otm_pct):.1f}% ITM"
+            )
+        else:
+            otm_str = "-"
+
+        if thesis.buy_price is not None and thesis.buy_price > 0:
+            vs_pct = (
+                (thesis.buy_price - option.strike) / thesis.buy_price * 100
+            )
+            vs_str = (
+                f"{vs_pct:.1f}% below"
+                if vs_pct >= 0
+                else f"[bold red]{abs(vs_pct):.1f}% above[/]"
+            )
+        else:
+            vs_str = "-"
+
+        options.add_row(
+            f"{score.total:.1f}",
+            str(option.strike),
+            otm_str,
+            vs_str,
+            str(option.expiration),
+            "-" if option.bid is None else f"{option.bid:.2f}",
+            "-" if option.ask is None else f"{option.ask:.2f}",
+            "-" if option.delta is None else f"{option.delta:.3f}",
+            "-" if option.implied_volatility is None else f"{option.implied_volatility:.2%}",
+            "-" if option.open_interest is None else str(option.open_interest),
+            scored.evaluation.recommendation.value,
+        )
+
+    console.print()
+    console.print(options)
+
+    if result.rejected:
+
+        reasons = Counter(item.reason for item in result.rejected)
+        example_detail = {item.reason: item.detail for item in result.rejected}
+
+        rejected_table = Table(title="Rejected Contracts")
+        rejected_table.add_column("Reason")
+        rejected_table.add_column("Count", justify="right")
+        rejected_table.add_column("Example")
+
+        for reason, count in reasons.most_common():
+            rejected_table.add_row(reason, str(count), example_detail[reason])
+
+        console.print()
+        console.print(rejected_table)
+
+    if not result.contracts:
+        console.print(
+            "\n[bold yellow]No candidates passed the Constitution "
+            "or had usable market data.[/] See 'Rejected Contracts' "
+            "above for why."
+        )
+
+
+async def _multi(
+    tickers: list[str],
+    exchange: str,
+    currency: str,
+    long_term: bool,
+    service: AnalysisService,
+) -> None:
+
+    console.print(f"\nAnalyzing [bold]{len(tickers)}[/] ticker(s)...\n")
+
+    summaries: list[TickerSummary] = []
+
+    for i, ticker in enumerate(tickers, 1):
+
+        console.print(f"  [{i}/{len(tickers)}] {ticker}...", end=" ")
+
+        try:
+            result = await service.analyze(
+                ticker, exchange=exchange, currency=currency, long_term=long_term
+            )
+            summary = build_summary(ticker, None, result)
+            console.print(
+                f"[green]{summary.candidates} candidate(s)[/]"
+                if summary.candidates > 0
+                else "[dim]no candidates[/]"
+            )
+        except Exception as exc:
+            summary = TickerSummary(
+                ticker=ticker,
+                atlas_valoracion=None,
+                candidates=0,
+                best_score=None,
+                best_strike=None,
+                best_expiration=None,
+                best_otm_pct=None,
+                top_rejection=f"ERROR: {exc}",
+            )
+            console.print(f"[red]error: {exc}[/]")
+
+        summaries.append(summary)
+
+    print_summary_table(summaries, long_term)
