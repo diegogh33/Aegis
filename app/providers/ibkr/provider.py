@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -12,6 +13,11 @@ from app.models.option_contract import OptionContract
 from app.providers.ibkr.greeks_estimate import estimate_put_delta
 from app.providers.ibkr.mapper import IBKRMapper
 from app.providers.ibkr.market_data import MarketDataProvider
+
+# ib_async prints "tickSize: Unknown reqId: N" to stdout when it
+# receives a tick type it doesn't recognise (happens with generic
+# tick 101 / putOpenInterest on some contracts). Suppress it.
+logging.getLogger("ib_async").setLevel(logging.ERROR)
 
 
 def _as_single_contract(
