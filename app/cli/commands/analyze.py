@@ -150,7 +150,7 @@ async def _analyze(
         options.add_column("Ask", justify="right")
         options.add_column("Delta", justify="right")
         options.add_column("IV", justify="right")
-        options.add_column("Volume", justify="right")
+        options.add_column("Open Int", justify="right")
         options.add_column("Recommendation")
 
         for scored in result.contracts:
@@ -194,7 +194,7 @@ async def _analyze(
                 "-" if option.ask is None else f"{option.ask:.2f}",
                 "-" if option.delta is None else f"{option.delta:.3f}",
                 "-" if option.implied_volatility is None else f"{option.implied_volatility:.2%}",
-                "-" if option.volume is None else str(int(option.volume)),
+                "-" if option.open_interest is None else str(option.open_interest),
                 scored.evaluation.recommendation.value,
             )
 
