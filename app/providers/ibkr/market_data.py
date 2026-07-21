@@ -182,7 +182,7 @@ class MarketDataProvider:
 
     async def get(self, contract) -> MarketData:
 
-        ticker = await self._request_ticker(contract, genericTickList="100")
+        ticker = await self._request_ticker(contract, genericTickList="100,101")
 
         greeks = ticker.modelGreeks
 
