@@ -79,10 +79,20 @@ class OptionScanner:
 
         for contract, market in zip(contracts, markets):
 
+            # Prefer the stock's own price (fetched once per scan via
+            # get_underlying_price) over the underlying_price embedded
+            # in the option's market data tick. The latter can be in a
+            # different scale for some European markets (confirmed with
+            # ASML on EUREX: market.underlying_price came back at ~€83
+            # instead of the real ~€1576, making OTM% calculations
+            # completely wrong). The stock price itself is reliable and
+            # consistent across markets. Fall back to market.
+            # underlying_price only when get_underlying_price() had
+            # nothing to offer.
             underlying_price = (
-                market.underlying_price
-                if market.underlying_price is not None
-                else fallback_underlying_price
+                fallback_underlying_price
+                if fallback_underlying_price is not None
+                else market.underlying_price
             )
 
             enriched_contract = replace(

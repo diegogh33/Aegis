@@ -76,21 +76,30 @@ async def test_falls_back_to_stock_price_when_option_has_no_underlying_price():
     assert result[0].underlying_price == Decimal("280.00")
 
 
-async def test_uses_option_own_underlying_price_when_available():
+async def test_stock_price_is_preferred_over_options_embedded_underlying_price():
+    """
+    Regression test from real ASML --long-term run: the underlying_price
+    embedded in the option's market data tick came back at ~€83 instead
+    of the real ~€1576 (a known scale issue with EUREX options), making
+    OTM% calculations completely wrong. The stock's own price
+    (get_underlying_price) is now always preferred when available -
+    it's reliable and consistent across markets.
+    """
     option = build_option(delta=None)
 
     provider = AsyncMock()
     provider.get_put_contracts.return_value = [option]
     provider.get_underlying_price.return_value = Decimal("280.00")
     provider.get_market_data.return_value = _market_data(
-        underlying_price=Decimal("281.50")
+        underlying_price=Decimal("83.00")  # wrong scale, like ASML on EUREX
     )
 
     scanner = OptionScanner(provider)
 
     result = await scanner.scan_puts("AAPL")
 
-    assert result[0].underlying_price == Decimal("281.50")
+    # Stock price (280.00) wins over the option's embedded price (83.00)
+    assert result[0].underlying_price == Decimal("280.00")
 
 
 async def test_underlying_price_stays_none_if_both_sources_are_missing():
