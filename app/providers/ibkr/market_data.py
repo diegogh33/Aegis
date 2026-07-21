@@ -89,10 +89,13 @@ def _to_market_data(
             else ticker.volume
         ),
         open_interest=(
+            # For PUT options, putOpenInterest is the correct field.
+            # ticker.openInterest is a generic/aggregate field that
+            # may not be populated for individual option contracts.
             None
-            if ticker.openInterest is None
-            or math.isnan(ticker.openInterest)
-            else int(ticker.openInterest)
+            if ticker.putOpenInterest is None
+            or math.isnan(ticker.putOpenInterest)
+            else int(ticker.putOpenInterest)
         ),
     )
 
@@ -220,13 +223,13 @@ class MarketDataProvider:
         # tick-by-tick, so it can take longer than the 2-second wait
         # in _request_ticker to arrive - poll briefly if it's missing
         # despite having a valid price.
-        if _has_any_price(ticker) and math.isnan(ticker.openInterest):
+        if _has_any_price(ticker) and math.isnan(ticker.putOpenInterest):
 
             for _ in range(4):
 
                 await asyncio.sleep(0.5)
 
-                if not math.isnan(ticker.openInterest):
+                if not math.isnan(ticker.putOpenInterest):
                     break
 
         if not _has_any_price(ticker):

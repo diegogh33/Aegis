@@ -73,16 +73,13 @@ def test_ticker_with_bid_ask_has_a_price():
 
 def test_maps_open_interest_from_ticker():
     """
-    Regression test: open_interest was hardcoded to None in the
-    MarketData built by get(), even though the model and
-    LiquidityRule both support checking it - meaning half of
-    LiquidityRule (the open interest check) could never actually
-    trigger. ticker.openInterest is populated as part of the standard
-    option computation ticks, same as the Greeks, with no special
-    genericTickList needed.
+    Regression: was reading ticker.openInterest (generic/aggregate)
+    instead of ticker.putOpenInterest - the correct field for
+    individual PUT option contracts. openInterest was always NaN
+    despite having a valid subscription and data visible in TWS.
     """
     ticker = Ticker()
-    ticker.openInterest = 750.0
+    ticker.putOpenInterest = 750.0
 
     market_data = _to_market_data(ticker, greeks=None)
 
@@ -91,7 +88,7 @@ def test_maps_open_interest_from_ticker():
 
 def test_open_interest_nan_maps_to_none():
     ticker = Ticker()
-    # openInterest defaults to NaN on a fresh Ticker.
+    # putOpenInterest defaults to NaN on a fresh Ticker.
 
     market_data = _to_market_data(ticker, greeks=None)
 
