@@ -72,16 +72,18 @@ def test_entrada_max_maps_to_buy_price():
         valoracion="alcista",
         resumen=None,
         fecha=None,
-        zona_compra=None,
+        zona_compra="≤$160 · compra clara <$150",
         entrada_max=160.0,
     )
 
     thesis = thesis_from_atlas_entry(entry)
 
     assert thesis.buy_price == Decimal("160.0")
+    assert thesis.zona_compra == "≤$160 · compra clara <$150"
 
 
 def test_missing_entrada_max_leaves_buy_price_none():
     thesis = thesis_from_atlas_entry(_entry("alcista"))
 
     assert thesis.buy_price is None
+    assert thesis.zona_compra is None

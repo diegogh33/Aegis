@@ -47,4 +47,5 @@ def thesis_from_atlas_entry(entry: AtlasEntry | None) -> InvestmentThesis:
             if entry.entrada_max is not None
             else None
         ),
+        zona_compra=entry.zona_compra,
     )

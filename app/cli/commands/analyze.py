@@ -80,6 +80,7 @@ async def _analyze(
         )
 
         company = result.company
+        thesis = result.thesis
 
         if result.company_known:
 
@@ -95,6 +96,17 @@ async def _analyze(
             company_table.add_row("Industry", company.industry)
             company_table.add_row("Market Cap", f"{company.market_cap:,}")
 
+            if thesis.buy_price is not None:
+                company_table.add_row(
+                    "Max Entry",
+                    f"${thesis.buy_price:,.2f}",
+                )
+            if thesis.zona_compra is not None:
+                company_table.add_row(
+                    "Buy Zone",
+                    thesis.zona_compra,
+                )
+
             console.print()
             console.print(company_table)
 
@@ -105,8 +117,6 @@ async def _analyze(
                 f"Continuing with the options analysis, which doesn't "
                 f"depend on this."
             )
-
-        thesis = result.thesis
 
         if thesis.watchlist:
             console.print(
@@ -134,6 +144,7 @@ async def _analyze(
         options.add_column("Score", justify="right")
         options.add_column("Strike", justify="right")
         options.add_column("OTM%", justify="right")
+        options.add_column("vs Buy Zone", justify="right")
         options.add_column("Expiration")
         options.add_column("Bid", justify="right")
         options.add_column("Ask", justify="right")
@@ -160,10 +171,24 @@ async def _analyze(
             else:
                 otm_str = "-"
 
+            if thesis.buy_price is not None and thesis.buy_price > 0:
+                vs_pct = (
+                    (thesis.buy_price - option.strike)
+                    / thesis.buy_price
+                    * 100
+                )
+                if vs_pct >= 0:
+                    vs_str = f"{vs_pct:.1f}% below"
+                else:
+                    vs_str = f"[bold red]{abs(vs_pct):.1f}% above[/]"
+            else:
+                vs_str = "-"
+
             options.add_row(
                 f"{score.total:.1f}",
                 str(option.strike),
                 otm_str,
+                vs_str,
                 str(option.expiration),
                 "-" if option.bid is None else f"{option.bid:.2f}",
                 "-" if option.ask is None else f"{option.ask:.2f}",

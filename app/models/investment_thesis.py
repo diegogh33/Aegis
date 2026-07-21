@@ -24,6 +24,8 @@ class InvestmentThesis(BaseModel):
 
     buy_price: Money | None = None
 
+    zona_compra: str | None = None
+
     quality_score: Score | None = None
 
     approved: bool = False
