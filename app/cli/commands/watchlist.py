@@ -5,6 +5,7 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Optional
 
+import typer
 from rich.console import Console
 from rich.table import Table
 
@@ -30,7 +31,10 @@ class TickerSummary:
 
 
 def watchlist(
-    tickers: Optional[list[str]] = None,
+    tickers: Optional[list[str]] = typer.Argument(
+        default=None,
+        help="Tickers to analyze. If omitted, analyzes all tickers in ATLAS.",
+    ),
     currency: str = "USD",
     long_term: bool = False,
 ) -> None:
