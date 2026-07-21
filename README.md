@@ -207,543 +207,70 @@ CLI / Dashboard
 
 ## Lo que funciona hoy
 
--   **Primera ejecución 100% completa de extremo a extremo,
-    confirmada con datos reales** (AAPL, mercado US abierto,
-    15-jul-2026): dos candidatos atravesaron todo el pipeline —
-    IBKR real → `MetricsEngine` → 6 reglas de Constitution →
-    `OptionScoreEngine` → ranking final — con Bid/Ask/Delta/IV/Volumen
-    reales, no ausentes. El resto de la sesión había ido resolviendo,
-    uno a uno, los motivos por los que esto no ocurría antes
-    (pipeline roto, NaN, suscripciones de datos, ventanas de
-    vencimiento mal filtradas, timing de Greeks); este es el punto
-    donde todo eso convergió en un resultado real y útil.
--   Estructura de paquetes Python correcta (todos los subpaquetes de
-    `app/` tienen su `__init__.py`).
--   Suite de tests ejecutable: `uv run pytest` pasa en limpio (72
-    tests).
--   Linting limpio: `uv run ruff check .` sin avisos.
--   **`open_interest` de opciones ya se puebla desde IBKR.** Estaba
-    hardcodeado a `None` en `MarketDataProvider.get()` desde que se
-    escribió — nunca se leía `ticker.openInterest`, pese a que el
-    modelo lo soporta y `LiquidityRule` ya lo comprueba desde su
-    creación. En la práctica, la mitad de `LiquidityRule` (el chequeo
-    de open interest) nunca podía activarse; solo el de volumen
-    funcionaba de verdad. Se popula igual que los Greeks, sin
-    `genericTickList` especial, como parte de los ticks estándar de
-    "option computation". De paso, el mapeo de `Ticker` a
-    `MarketData` se extrajo a una función pura (`_to_market_data`),
-    testeable sin conexión a IBKR — antes solo era testeable
-    end-to-end contra una conexión real.
--   **`InvestmentThesis.approved` ya viene de datos reales: la
-    biblioteca ATLAS (`diegogh33/atlas-research`).** Antes era
-    `approved=True` fijo en `AnalysisService`, sin ninguna fuente
-    real de datos — hoy es una decisión real que refleja tu propia
-    convicción de inversión por empresa. Nuevo provider
-    (`app/providers/atlas/`): `AtlasClient` lee la API de GitHub
-    (repo configurable vía `ATLAS_REPO`, token opcional vía
-    `GITHUB_TOKEN` para evitar el rate-limit de 60/hora sin
-    autenticar), `AtlasMapper` parsea el frontmatter YAML de cada
-    fichero en `analyses/`, y `AtlasProvider` construye un índice
-    `ticker → entrada` (indexado por el campo `ticker` del propio
-    YAML, **no** por el nombre de fichero — en tu repo real hay
-    mezcla de mayúsculas/minúsculas y nombres que no coinciden con
-    el ticker, ej. `mc.pa.md` para `MC.PA`, `are.md` para `ARE`).
-    El índice se construye una vez y se cachea en memoria durante el
-    análisis. Mapeo de `valoracion` (campo real de ATLAS) a
-    `InvestmentThesis`: `alcista`/`posicion` → `approved=True`;
-    `seguimiento` → `approved=False, watchlist=True` (en observación,
-    sin convicción confirmada todavía); sin entrada en ATLAS (nunca
-    analizado) → `approved=False`, coherente con el principio de
-    ATLAS de "primero se aprueba la empresa, después se busca la
-    mejor CSP". Un fichero de análisis mal formado no rompe la
-    búsqueda del resto — se salta con un aviso.
--   **`CompanyApprovedRule` ya no bloquea — deja pasar candidatos de
-    empresas sin aprobar, con score reducido y un aviso visible.**
-    Probando `DRAM` (ticker sin ninguna entrada en ATLAS): los 32
-    contratos fueron rechazados en bloque por
-    `COMPANY_APPROVED`, sin llegar a evaluarse el resto de la
-    Constitution — la tabla salía vacía sin ninguna información
-    útil sobre el mercado real, ni siquiera para explorar una idea
-    nueva. Confirmado que era el comportamiento deseado (bloqueante)
-    para empresas ya analizadas pero no convincentes, pero
-    demasiado agresivo para las que simplemente aún no se han
-    mirado. Ahora `CompanyApprovedRule` sigue el mismo patrón que
-    `DeltaRule` (bloquea solo en el caso más severo): `PASS`
-    (aprobada, score 10), `WARNING` (en watchlist/`seguimiento`,
-    score 4, no bloquea), `FAIL` (nunca analizada, score 0, **tampoco
-    bloquea** — a diferencia de otras reglas, aquí incluso el FAIL
-    deja pasar el candidato, solo que sin ese score). El CLI avisa
-    explícitamente cuando la empresa no está aprobada o está en
-    watchlist.
--   **Bug real encontrado de paso: `STRONG_BUY`/`BUY` nunca eran
-    alcanzables, con o sin este cambio.** `EvaluationReport.
-    recommendation` comparaba `score` contra umbrales fijos (`>=90`
-    para `STRONG_BUY`, `>=75` para `BUY`), pero el máximo posible de
-    `score` (suma de las 6 reglas de Constitution, 10 puntos cada
-    una si `PASS`) es **60** — nunca pudo alcanzar 75 ni 90, para
-    ningún candidato, estuviera aprobado o no. Corregido: nuevo
-    `EvaluationReport.max_score` (calculado dinámicamente como
-    `nº de reglas × 10`, no una constante fija — sigue siendo
-    correcto si se añaden/quitan reglas, como IVR más adelante), y
-    `recommendation` ahora compara contra el 90%/75% de ese máximo
-    real, no contra un número absoluto.
--   **`IVRankRule` — séptima y última regla de la Constitution
-    original, cerrando el motor de reglas al completo.** Ninguno de
-    los 3 proveedores de datos (IBKR, Alpha Vantage, Massive Market
-    Data) da IV Rank de forma fiable — no es un dato que se pida
-    directamente, es un cálculo sobre histórico propio:
-    `(IV actual - IV mín en ventana) / (IV máx - IV mín) × 100`.
-    Nuevo paquete `app/iv_history/`:
-    -   `IVHistoryRepository` — SQLite local (`data/iv_history.db`,
-        excluido de git; solo `sqlite3` de la librería estándar, sin
-        dependencias nuevas), clave natural `(ticker, día)` —
-        analizar el mismo ticker varias veces el mismo día
-        sobreescribe el snapshot de ese día en vez de duplicarlo.
-    -   `calculate_iv_rank()` — cálculo puro, devuelve `rank=None`
-        (no un 0 o 100 engañoso) si no hay histórico suficiente, o
-        si el histórico es completamente plano (`max == min`,
-        división por cero evitada explícitamente).
-    -   `AnalysisService.analyze()` graba un snapshot diario
-        automáticamente en cada análisis (mediana de la IV entre los
-        contratos escaneados que sí la tengan — más robusto que
-        depender de un único strike, que puede no tener Greeks
-        calculables) — sin comando ni tarea programada aparte, a
-        petición de Diego.
-    -   `IVRankRule`: umbrales reales del sistema de venta de primas
-        de Diego (`Sistema_Venta_Prima.md`): `IVR ≥30` aceptable
-        (`WARNING`), `≥40` preferido (`PASS`). Exige
-        `minimum_days_history: 90` (constitution.yaml,
-        `cash_secured_put.ivr`) antes de bloquear de verdad — con
-        menos historial, pasa sin bloquear (`WARNING`, score
-        neutral) en vez de rechazar candidatos por un hueco de datos
-        que se resolverá solo con el tiempo. Mismo criterio con IV
-        ausente en el contrato.
-    -   **Bug real encontrado mientras se escribían los tests**:
-        `IVRankRule.evaluate()` multiplicaba `current_iv` por 100
-        antes de compararlo contra el histórico — pero el histórico
-        ya se guarda como fracción (igual que llega de IBKR, ej.
-        `0.47`), así que la comparación mezclaba escalas
-        (`current_iv` en 0-100, histórico en 0-1) y daba ranks sin
-        sentido (ej. IV=21% rankeando 100). Corregido: ambos se
-        comparan en fracción: `calculate_iv_rank()` ya normaliza
-        internamente a 0-100 en su propia fórmula.
--   **`LongTermPutStrategy` — nueva estrategia oportunista para
-    caídas de alta convicción, activada con `--long-term`.**
-    Complementaria a la venta de primas recurrente
-    (`CashSecuredPutStrategy`), no la sustituye ni cambia su
-    comportamiento por defecto. Motivada por un caso real: ACN cayó a
-    ~$135 de forma que Diego consideró sobrerreacción del mercado, y
-    vendió un PUT strike $120 a vencimiento noviembre (~133 DTE) por
-    una prima de $8.80 — o el precio no baja más y se queda la prima,
-    o baja y se compran acciones a $120, un precio ya considerado
-    atractivo.
-    -   **Ventana propia**: DTE 90-365 días
-        (`long_term_put.dte`/`long_term_put.scan_dte_window` en
-        `constitution.yaml`), muy por encima de los 30-45 días de la
-        estrategia recurrente.
-    -   **Delta más bajo/conservador**: rango preferido -0.10/-0.30
-        (`long_term_put.delta`), calibrado con Black-Scholes contra
-        el propio ejemplo real de Diego — con IV~48% y ~133 DTE, un
-        strike $120 sobre precio $135 da un delta estimado de -0.27,
-        no -0.05/-0.15 como se había propuesto inicialmente antes de
-        hacer el cálculo (a más DTE, un mismo strike OTM tiende a
-        tener delta más alto, no más bajo — lo contrario de la
-        intuición inicial).
-    -   **`BelowBuyZoneRule` (nueva)**: exige que el strike esté al
-        nivel o por debajo del techo de entrada de ATLAS
-        (`InvestmentThesis.buy_price`, mapeado desde `entrada_max` de
-        ATLAS — vender un PUT con strike por encima de ese techo
-        significaría comprar acciones a un precio que ya no se
-        considera atractivo, justo lo contrario del propósito de la
-        estrategia). Si el ticker no tiene entrada en ATLAS (caída
-        puntual, nunca analizado a fondo — caso explícitamente
-        soportado a petición de Diego), **no bloquea**: muestra el
-        % de descuento del strike sobre el precio actual como
-        contexto, para que la decisión la tome él con esa
-        información delante, en vez de que la estrategia quede
-        indisponible por falta de un análisis formal previo.
-    -   **`IVRankRule` informativo, no bloqueante aquí**
-        (`can_block=False`) — con un horizonte de 90-365 días, el
-        IVR del momento del análisis pesa mucho menos que en la
-        estrategia recurrente de ~30-45 días.
-    -   **Reutiliza sin duplicar**: `DeltaRule` y `DTERule` ganaron
-        un parámetro `config_section` (por defecto
-        `"cash_secured_put"`) para leer los umbrales de
-        `long_term_put` en vez de duplicar toda la clase — misma
-        lógica, distinta sección de configuración.
-    -   `CompanyApprovedRule`, `NoUpcomingEarningsRule`,
-        `LiquidityRule`, `SpreadRule` se reutilizan sin cambios.
-    -   CLI: `uv run python -m app.main ACN --long-term` — comando
-        separado de la estrategia recurrente (no se ejecutan ambas
-        a la vez), con su propio título de tabla
-        ("Best Long-Term PUT Candidates").
--   `config/constitution.yaml` ya contiene toda la configuración de
-    reglas (delta, earnings, liquidez, spread, premium, pesos de
-    scoring) — la configuración va por delante del código que la
-    consume.
--   **Sistema de reglas unificado.** Existía un segundo sistema de
-    reglas en paralelo (`BaseRule`/`HardFilterEngine`), incompatible
-    con el usado por `RuleEngine`/`Strategy`. Se ha eliminado y todo
-    vive ahora sobre una única interfaz: `Rule` (`app/rules/base.py`)
-    + `RuleResult`/`RuleStatus` (`app/core/`).
--   **`CashSecuredPutStrategy` conectada a `AnalysisService`.** Cada
-    contrato recuperado de IBKR se evalúa contra la Constitution antes
-    de puntuarse; los que no pasan (bloqueantes en `FAIL`) se
-    descartan y no llegan al ranking final. Dos reglas bloqueantes
-    activas por ahora:
-    -   `CompanyApprovedRule` — lee `InvestmentThesis.approved`. **Hoy
-        está hardcodeado a `True` en `AnalysisService`** porque no
-        existe todavía una fuente de datos real de tesis de inversión
-        conectada a este repo (ver limitaciones más abajo).
-    -   `NoUpcomingEarningsRule` — descarta si hay earnings dentro del
-        `minimum_days` configurado. `Company.next_earnings` tampoco
-        se puebla desde ningún provider todavía, así que hoy siempre
-        es `None` y la regla pasa por defecto.
--   **`MetricsEngine` y `OptionScoreEngine` reparados.** Antes de este
-    commit, ambos estaban rotos de forma silenciosa: `MetricsEngine`
-    construía un `OptionMetrics` con campos que no existían en el
-    dataclass real (`TypeError` garantizado en cuanto se ejecutara), y
-    `OptionScoreEngine.evaluate()` leía Greeks/volumen desde
-    `OptionMetrics` en vez de desde `OptionContract` (donde realmente
-    viven). Como nada tenía test, el bug llevaba tiempo sin
-    detectarse — el flujo de scoring **nunca había podido ejecutarse
-    con éxito** hasta ahora, a pesar de que el README anterior lo
-    describía como "operativo".
--   `tests/conftest.py` centraliza los builders de `Company`,
-    `OptionContract` e `InvestmentCandidate` para tests — evita
-    duplicar fixtures en cada fichero de test.
--   `AnalysisService.analyze()` tiene test de integración con mocks
-    (`tests/services/test_analysis_service.py`), cubriendo: scoring y
-    ranking de contratos elegibles, rechazo por earnings próximos, y
-    descarte de contratos sin `underlying_price`.
--   **CLI probado contra IBKR real por primera vez** (ticker AAPL).
-    Destapó un segundo bug de ejecución: `MarketDataProvider` no
-    trataba `NaN` como dato ausente (solo `None`/`-1`), así que un
-    `NaN` de IBKR llegaba intacto hasta `LiquidityFilter` y explotaba
-    con `decimal.InvalidOperation` al compararlo. Corregido con
-    `_decimal_or_none()` en `app/providers/ibkr/market_data.py`, que
-    normaliza `None`/`-1`/`NaN` a `None` de forma consistente. También
-    se ha eliminado un bloque de `print()` de debug que ensuciaba la
-    salida del CLI con el detalle de cada contrato.
--   **`underlying_price` con fallback al precio de la acción.**
-    Con la suscripción de opciones bloqueada (error 10091), el
-    `underlying_price` de cada opción individual llegaba siempre
-    vacío, y `AnalysisService` descartaba silenciosamente el 100% de
-    los contratos (`if underlying_price is None: continue`) — la
-    tabla del CLI salía vacía sin ningún error visible. Ahora
-    `IBKRProvider.get_underlying_price()` pide el precio de la propia
-    acción (que normalmente sí tiene datos disponibles, a diferencia
-    de sus opciones) una sola vez por análisis, y `OptionScanner` lo
-    usa como valor de respaldo cuando el de la opción individual
-    viene vacío.
--   **`DTERule` — tercera regla bloqueante de la Constitution.**
-    Descarta contratos cuyo DTE (días hasta vencimiento) caiga fuera
-    del rango `cash_secured_put.dte.min`/`max` de
-    `config/constitution.yaml` (30–45 por defecto). A diferencia de
-    `DeltaRule`/`NoUpcomingEarningsRule`, `DTERule` sí lee sus
-    umbrales de `constitution.yaml` a través de `Settings` en vez de
-    tenerlos hardcodeados — ver nota en limitaciones sobre esta
-    inconsistencia.
--   **`DeltaRule` — cuarta regla, ahora también bloqueante.**
-    Antes solo aportaba puntuación (`blocker = False`); ahora
-    descarta candidatos cuyo delta caiga fuera del rango completo
-    (`warning_min`/`pass_max`, -0.35/-0.15 por defecto) o venga
-    ausente. Deliberadamente **no** bloquea el estado intermedio
-    `WARNING` (delta algo más agresivo que el preferido, entre
-    `warning_min` y `pass_min`): ese matiz de tolerancia con criterio
-    ya existía en el diseño de la regla y se ha conservado — solo
-    penaliza en score, no rechaza. Solo `FAIL` (fuera de rango del
-    todo, o delta ausente) bloquea.
--   **`LiquidityRule` y `SpreadRule` — quinta y sexta regla
-    bloqueante.** Sustituyen por completo al antiguo
-    `LiquidityFilter` (servicio eliminado, ver más abajo). Ambas leen
-    `constitution.yaml` (`cash_secured_put.liquidity` y
-    `cash_secured_put.spread`) vía `Settings`, igual que `DTERule`.
-    `LiquidityRule` comprueba volumen y open interest por separado
-    (el `LiquidityFilter` antiguo nunca comprobaba open interest,
-    pese a que `constitution.yaml` ya lo definía). Igual que
-    `LiquidityFilter`, ambas tratan los datos ausentes como `PASS`,
-    no como rechazo — necesario mientras IBKR no siempre devuelva
-    bid/ask/volumen/open interest (ver limitaciones de datos).
--   **`LiquidityFilter` (servicio) eliminado.** Vivía en
-    `OptionScanner`, fuera del `RuleEngine`, con umbrales
-    hardcodeados que **no coincidían** con `constitution.yaml`
-    (`minimum_volume=1` en el servicio vs. `50` en el YAML,
-    `maximum_spread_pct=0.20` vs. `maximum_percent: 5` = 0.05, y
-    nunca comprobaba `minimum_open_interest`). El filtrado de
-    liquidez y spread ahora ocurre una sola vez, en un solo sitio, con
-    los valores reales de la Constitution.
--   **Las 6 reglas de Constitution existentes ya leen
-    `constitution.yaml` de forma consistente.** `DeltaRule` y
-    `NoUpcomingEarningsRule` tenían sus umbrales hardcodeados en el
-    constructor pese a que los mismos valores ya existían en el YAML
-    (`delta.preferred`/`delta.warning`, `earnings.minimum_days`).
-    Ahora ambas siguen el mismo patrón que `DTERule`/`LiquidityRule`/
-    `SpreadRule`: leen `Settings` por defecto, con override explícito
-    disponible en el constructor (usado en tests). Los valores por
-    defecto no cambiaron — solo se volvieron editables desde el YAML
-    sin tocar código.
--   **`mypy app` en limpio: 0 errores (bajó de 20).** Se encontraron
-    5 ficheros de código muerto, nunca importados por nada del
-    proyecto, que generaban la mitad de los errores:
-    `app/providers/alphavantage/option_mapper.py` (mapper de opciones
-    de AlphaVantage que ni siquiera coincidía con el modelo real de
-    `OptionContract`), `app/selectors/option_selector.py` y
-    `app/selectors/base.py` (un selector de opciones "temporal" ya
-    reemplazado por `OptionScoreEngine`/`CashSecuredPutStrategy`),
-    `app/criteria/base.py` y `app/core/criterion_report.py` (otro
-    sistema de agregación de reglas en paralelo, nunca conectado a
-    nada). Los paquetes `app/selectors/` y `app/criteria/`, ya
-    vacíos, se eliminaron también. El resto de errores reales se
-    corrigieron: `EvaluationReport.score` podía devolver `int(0)` en
-    vez de `Decimal` cuando no había resultados (`sum()` sin `start`
-    explícito); faltaban stubs de tipos para `yaml`
-    (`types-PyYAML`, añadido a las dependencias de desarrollo); y
-    `IBKRProvider` asumía sin comprobar que
-    `qualifyContractsAsync()`/`ContractDetails.contract` siempre
-    devolvían un `Contract` válido — ahora se valida explícitamente
-    en runtime (`_as_single_contract()`), coincidiendo con lo que
-    los stubs de `ib_async` ya declaraban como posible.
--   **4 ficheros de código muerto más, encontrados de paso al
-    empezar a trabajar en IVR.** `app/models/candidate.py` (una
-    clase `Candidate`, distinta de `InvestmentCandidate`, nunca
-    importada), `app/models/ranked_contract.py` y
-    `app/models/watchlist.py` (mismo patrón: modelos completos sin
-    ninguna referencia real), y `app/builders/
-    investment_candidate_builder.py` (un builder para
-    `InvestmentCandidate` nunca usado —
-    `AnalysisService` lo construye directamente). El paquete
-    `app/builders/`, ya vacío, se eliminó también.
--   **Score de "Premium" eliminado — estaba sin implementar
-    (`0.0` fijo) y duplicaba `annualized_return`.** Análisis previo
-    (documento externo, revisado y confirmado) mostró que
-    `Annualized Return = ROC × (365 / DTE)` — ambas métricas miden
-    esencialmente la misma señal de rentabilidad, solo que una está
-    anualizada y la otra no. Mantener las dos como componentes de
-    score independientes habría duplicado el peso de la misma
-    información. `ScoreResult` ya no tiene campo `premium`;
-    `scoring.premium` se eliminó de `constitution.yaml` y sus 10
-    puntos de peso se sumaron a `annualized_return` (35 → 45), para
-    que el techo teórico del score total siga siendo 100
-    (delta 30 + spread 15 + volume 10 + annualized_return 45). Nota:
-    `cash_secured_put.premium.minimum_annualized_return` sigue
-    existiendo en el YAML — es un umbral de filtro distinto, no
-    relacionado con este score, y no se ha tocado.
--   **El CLI ya explica por qué la tabla de resultados sale vacía o
-    incompleta, en vez de silencio total.** Antes, un contrato
-    descartado (por falta de `underlying_price` o por fallar la
-    Constitution) simplemente desaparecía sin dejar rastro — así fue
-    como una tabla vacía por mercado cerrado se confundió al
-    principio con un bug real. `AnalysisService.analyze()` ahora
-    devuelve también `rejected: list[RejectedContract]` (contrato +
-    motivo: `NO_UNDERLYING_PRICE`, o el `rule_id` de la regla de
-    Constitution que bloqueó, ej. `DELTA`, `DTE`, `NO_EARNINGS`). El
-    CLI muestra una tabla "Rejected Contracts" agrupada por motivo con
-    conteo y un mensaje de ejemplo, y un aviso explícito si la tabla
-    de candidatos queda vacía del todo.
--   **Soporte para tickers no estadounidenses** (`--currency`,
-    `--exchange` en el CLI). Antes, `IBKRProvider` tenía
-    `Stock(symbol, "SMART", "USD")` hardcodeado en dos sitios —
-    cualquier ticker fuera de US habría fallado al cualificar el
-    contrato. Ahora `exchange`/`currency` son parámetros configurables
-    de extremo a extremo (`IBKRProvider` → `OptionScanner` →
-    `AnalysisService.analyze()` → CLI), con `SMART`/`USD` como
-    defaults para no romper el uso habitual. Probado en real con SAN
-    (Banco Santander) vía `--currency EUR`: IBKR devolvió el exchange
-    de opciones como **EUREX**, no MEFF como se había asumido en la
-    documentación original — corregido aquí.
--   **Filtro de ventana de vencimientos al escanear la cadena de
-    opciones (`scan.dte_window` en `constitution.yaml`, 20-60 días
-    por defecto), en vez del límite arbitrario `[:2]` anterior.**
-    Confirmado con datos reales: la cadena de SAN en EUREX tiene 19
-    vencimientos disponibles, pero `get_put_contracts()` solo miraba
-    los 2 más próximos cronológicamente (2 y 9 días) — muy por debajo
-    del rango operativo real (`cash_secured_put.dte`, 30-45 días), así
-    que todo se rechazaba siempre por DTE antes de llegar a ver algo
-    útil. `scan.dte_window` es deliberadamente más ancho que
-    `cash_secured_put.dte`: permite ver candidatos algo más lejanos
-    si la ventana estricta de la Constitution no trae nada
-    interesante (más prima a cambio de más plazo), sin gastar
-    peticiones de mercado en vencimientos demasiado cortos. Si ningún
-    vencimiento cae dentro de la ventana, cae de vuelta a los 2 más
-    próximos en vez de devolver una lista vacía. **Este fallback se
-    confirmó con un caso real extremo**: Inditex (ITX) en MEFFRV solo
-    tenía 3 vencimientos disponibles en el momento de la prueba, los
-    tres a años vista (2030-2031, LEAPS) — ninguno dentro de la
-    ventana 20-60. El sistema cayó correctamente a los 2 más
-    próximos (~1619 días) y los rechazó por DTE con el motivo
-    correcto, en vez de fallar o devolver algo engañoso. Esto no es
-    un bug: refleja la realidad de liquidez de opciones sobre
-    Inditex ahora mismo, no un problema de Aegis.
--   **Strikes seleccionados por cercanía al precio del subyacente
-    (`scan.strikes_per_expiration`, 8 por defecto), no arbitrariamente
-    — historia inicial, ver más abajo el cambio a selección por delta
-    objetivo que la sustituye.** Detectado probando SAN con el nuevo
-    filtro de ventana de vencimientos: `OptionScanner` tenía un corte
-    global `contracts[:10]` aplicado *después* de juntar los
-    contratos de varios vencimientos — con un vencimiento cercano
-    aportando ya 10+ strikes, el corte se comía entero ese
-    vencimiento y descartaba los otros dos sin que el usuario llegara
-    a verlos. El límite se aplica por vencimiento, dentro de
-    `IBKRProvider.get_put_contracts()`. El corte global
-    `contracts[:10]` en `OptionScanner` se eliminó por quedar
-    redundante.
--   **Selección de strikes por delta estimado (Black-Scholes), no
-    por cercanía de precio — sustituye la selección anterior.**
-    Probando DRAM (IV ATM ~95%, muy superior al ~47% de ACN):
-    comparando contra la cadena real en TWS, ningún strike de los 8
-    más cercanos al precio (56.61) caía dentro del rango de delta
-    objetivo — los strikes que sí lo hacían (ej. 47, delta real
-    ≈-0.22) estaban ~17% OTM, muy fuera del rango de precio que
-    cubrían los 8 más cercanos. Con IV alta, el delta objetivo cae
-    en strikes proporcionalmente mucho más lejos del precio que con
-    IV baja — seleccionar por proximidad de precio pura los dejaba
-    fuera sistemáticamente. Ahora, por cada vencimiento,
-    `IBKRProvider` pide primero el strike ATM real para sacar su IV
-    como referencia (`estimate_put_delta()`, Black-Scholes con
-    `statistics.NormalDist` de la librería estándar — sin
-    dependencias nuevas), y con ella estima el delta de cada strike
-    disponible **antes** de pedir datos de mercado para todos,
-    quedándose con los `strikes_per_expiration` más cercanos al
-    delta objetivo (punto medio de `cash_secured_put.delta.
-    preferred`, `-0.20` con los valores por defecto) en vez de a la
-    distancia de precio. Es una estimación con una única IV de
-    referencia (no la IV específica de cada strike, que solo se
-    conoce tras pedir sus datos reales) — calibrada contra los
-    deltas reales observados en ACN y DRAM (dentro de ~0.03 de
-    diferencia), suficiente para elegir qué strikes vale la pena
-    pedir, no para sustituir el delta real que sigue viniendo de
-    IBKR y usándose en `DeltaRule`/scoring. Coste: una petición de
-    mercado adicional por vencimiento (el ATM real), antes de las
-    peticiones por lotes ya existentes.
--   **Ventana de vencimientos (`scan.dte_window`) ajustada a 25-55
-    días (antes 20-60), y ventana de la Constitution
-    (`cash_secured_put.dte`) sigue en 30-45 sin cambios.**
--   **El CLI ya no revienta si Alpha Vantage no reconoce el ticker
-    (confirmado con ITX: `KeyError: 'Symbol'` sin control).**
-    `AlphaVantageMapper.company()` accedía a `data["Symbol"]`
-    directamente; para tickers no reconocidos (típicamente no-US sin
-    el sufijo de mercado correcto), Alpha Vantage devuelve un JSON
-    vacío `{}` en vez de un error explícito, y eso tumbaba todo el
-    CLI — incluida la parte de opciones, que es completamente
-    independiente (IBKR) y no tiene motivo para fallar por esto.
-    Ahora el mapper lanza `UnknownCompanyError` de forma controlada;
-    `AnalysisService.analyze()` la captura y continúa con un
-    `Company.unknown()` (placeholder) y `company_known=False` en el
-    resultado; el CLI se salta la tabla "Company" y muestra un aviso
-    explícito en su lugar, mientras la tabla de opciones sigue
-    funcionando con normalidad.
--   **El CLI tampoco revienta si Alpha Vantage devuelve un rate-limit
-    (confirmado en real: plan gratuito, 25 peticiones/día).**
-    Distinto del caso anterior — aquí el ticker sí es válido, pero
-    la API devuelve un campo `"Information"` con el aviso de límite,
-    que el cliente convertía en un `RuntimeError` genérico, sin
-    capturar en ningún sitio, así que tumbaba el análisis igual que
-    antes del fix de `UnknownCompanyError`. Nueva excepción
-    `AlphaVantageUnavailableError` (distinta de
-    `UnknownCompanyError`: aquí el problema es la API, no el
-    ticker), capturada de la misma forma en `AnalysisService` —
-    continúa con las opciones, `company_known=False`. `AnalysisResult`
-    ganó `company_error: str | None` con el mensaje real devuelto
-    por Alpha Vantage (antes el CLI mostraba un texto fijo pensado
-    solo para el caso de ticker no reconocido, que no encajaba con
-    un rate-limit). **Nota:** el plan gratuito de Alpha Vantage
-    permite solo 25 peticiones al día — con varias pruebas seguidas
-    en una sesión de trabajo (como esta) es fácil agotarlo; no hay
-    forma de evitarlo sin plan de pago, pero al menos ya no bloquea
-    el resto del análisis.
--   **Fallback automático a datos delayed cuando no hay suscripción
-    en tiempo real para un mercado concreto.** Confirmado probando
-    ITX en MEFFRV: `Error 354 - Requested market data is not
-    subscribed. Delayed market data is available.` — la cuenta tiene
-    suscripción en tiempo real para US, pero no para MEFFRV, y el
-    código forzaba `reqMarketDataType(1)` (tiempo real) sin más,
-    dejando esos contratos sin datos aunque IBKR ofreciera delayed
-    como alternativa. `MarketDataProvider._request_ticker()` ahora
-    pide tiempo real primero y, si no llega ningún precio en 2
-    segundos, reintenta automáticamente con delayed
-    (`reqMarketDataType(3)`) antes de darse por vencido, restaurando
-    tiempo real después para no dejar el resto de la sesión (ej.
-    contratos US que sí tienen suscripción real) atascada en modo
-    delayed — `reqMarketDataType()` es de toda la conexión, no por
-    petición individual.
--   **Poll adicional específico para `modelGreeks` — confirmado con
-    datos reales, funcionó.** Probando AAPL en horario US con la
-    suscripción funcionando bien (sin errores 10091/354), 24 de 32
-    contratos habían llegado con precio disponible pero **sin
-    delta** ("Delta unavailable"). El cálculo del modelo de Greeks
-    de IBKR tarda más en poblarse que bid/ask/last crudos, y
-    `_request_ticker()` devolvía el ticker en cuanto había *precio*,
-    sin esperar a que también llegaran los Greeks.
-    `MarketDataProvider.get()` ahora, si hay precio pero
-    `modelGreeks` sigue `None`, hace un poll corto (hasta 3 segundos
-    extra, en pasos de 0.5s) antes de rendirse. **Confirmado en la
-    siguiente ejecución real**: por primera vez en toda la sesión,
-    dos candidatos completaron todo el pipeline con datos 100%
-    reales (bid/ask/delta/IV/volumen) y llegaron al ranking final —
-    AAPL 310 PUT 21-ago (delta -0.276, score 80.0) y AAPL 315 PUT
-    21-ago (delta -0.343, score 66.4) — y el resto de rechazos
-    pasaron a tener motivos de mercado real (delta fuera de rango,
-    spread ancho, poco volumen) en vez de "sin datos".
--   **Fallback a `bidGreeks`/`askGreeks` cuando `modelGreeks` no
-    converge, ni siquiera con el poll.** Probando ACN, algunos
-    contratos evaluados llegaban con precio disponible pero sin
-    Greeks. `MarketDataProvider.get()` ahora, si `modelGreeks` sigue
-    `None` tras el poll, cae a `bidGreeks` y después a `askGreeks`
-    (`_select_greeks()`) — calculados directamente sobre el precio
-    cotizado de bid/ask en vez del precio "justo" del modelo, así
-    que pueden diferir ligeramente (más con spread ancho), pero un
-    delta aproximado es más útil que ninguno para un strike que sí
-    tiene cotización real. Queda registrado en el log de diagnóstico
-    cuándo el delta viene del modelo vs. de este fallback. **Nota:**
-    la hipótesis inicial (strikes OTM con menor liquidez, sin
-    relación con el problema real de abajo) resultó estar
-    equivocada — ver la entrada siguiente.
--   **Peticiones de datos de mercado en lotes, no todas a la vez —
-    corrige la causa real de los Greeks ausentes en ACN.**
-    Comparando los resultados de Aegis con la cadena real de opciones
-    de ACN en TWS (captura de pantalla del usuario): strikes con
-    volumen y cotización normales (ej. 120, 125, 140 PUT del
-    vencimiento de 37 días) aparecían en Aegis como "sin Greeks", sin
-    ninguna razón de mercado real que lo explicara — la hipótesis
-    original de "menor liquidez en strikes OTM" no encajaba con la
-    evidencia. Causa real: `OptionScanner.scan_puts()` lanzaba
-    **todas** las peticiones de market data a la vez con un único
-    `asyncio.gather()` (32 contratos para ACN: 8 strikes × 4
-    vencimientos) — por encima del límite documentado de IBKR de 50
-    mensajes/segundo por cliente de API, lo que puede saturar la
-    conexión y dejar suscripciones sin datos aunque el mercado real
-    tenga liquidez normal. Ahora las peticiones se agrupan en lotes
-    pequeños (`batch_size=6` por defecto, configurable), con cada
-    lote esperando a completarse antes de lanzar el siguiente — más
-    lento que antes, pero fiable.
--   **Log de diagnóstico por strike (`OptionScanner.scan_puts()`),
-    mostrando strike/vencimiento/delta/IV/bid/ask de cada contrato
-    enriquecido.** Antes, para saber qué delta se había calculado
-    para un strike concreto había que inferirlo del único ejemplo
-    que muestra la tabla "Rejected Contracts" del CLI. Ahora cada
-    contrato deja un log `DEBUG` propio, permitiendo comparar
-    directamente los deltas calculados por Aegis contra la cadena
-    real (ej. en TWS) sin necesidad de instrumentación manual.
--   **`tradingClass` fijado explícitamente al pedir contratos —
-    corrige cadenas de opciones contaminadas con clases secundarias
-    (confirmado con MSFT).** Probando `--long-term` con MSFT, la
-    cadena solo devolvía 3 vencimientos (normal en MSFT: decenas) y
-    aparecía un contrato con símbolo `2MSFT` en vez de `MSFT`, con un
-    único vencimiento y pocos strikes disponibles.
-    `reqSecDefOptParamsAsync()` puede devolver **más de una cadena**
-    bajo `exchange="SMART"` para el mismo subyacente — la clase
-    estándar (`tradingClass == símbolo`) junto a una clase secundaria
-    o especial — y el código se quedaba con la primera que
-    encontraba, sin comprobar `tradingClass`, así que en ocasiones
-    cogía la clase equivocada. Nueva función pura
-    `_select_option_chain()`: prioriza la cadena cuyo `tradingClass`
-    coincide exactamente con el símbolo, con fallback a la primera
-    de `SMART` y después a la primera de cualquier exchange si no
-    hay coincidencia exacta. El `tradingClass` elegido se fija
-    explícitamente en el `Option()` construido para pedir detalles
-    de cada contrato (antes no se especificaba en absoluto), evitando
-    que se mezclen clases distintas en los resultados.
+**Estado a 21-jul-2026: 143 tests, `mypy`/`ruff` limpios, 42 commits en rama `fuckyouchatgpt`.**
+
+### Pipeline completo de análisis (validado con datos reales)
+
+- **Motor de reglas completo**: las 7 reglas originales de la
+  Constitution implementadas y conectadas (`CompanyApproved`,
+  `NoUpcomingEarnings`, `DTE`, `Delta`, `Liquidity`, `Spread`,
+  `IVRankRule`). Todas leen `config/constitution.yaml`.
+- **Dos estrategias**: `CashSecuredPutStrategy` (recurrente, 30-45
+  DTE, delta -0.15/-0.25) y `LongTermPutStrategy` (oportunista,
+  90-365 DTE, delta -0.10/-0.30, activada con `--long-term`). Cada
+  una tiene sus propios umbrales de spread/liquidez configurables.
+- **ATLAS** (`diegogh33/atlas-research`) conectado como fuente real
+  de `InvestmentThesis`: aprueba/watchlist/no analizado según
+  `valoracion`. `BelowBuyZoneRule` (solo en `--long-term`) valida el
+  strike contra `entrada_max` de ATLAS.
+- **IVRank** con histórico SQLite local (`data/iv_history.db`):
+  snapshot diario automático en cada análisis, `IVRankRule` activa
+  tras 90 días de histórico por ticker.
+- **Scoring y ranking** con `OptionScoreEngine` (retorno anualizado
+  45%, delta 30%, spread 15%, volumen 10%).
+- **Validado en producción** contra IBKR real en US (AAPL, ACN,
+  DRAM) y Europa (ASML, SAP, SAN, ITX) con múltiples tipos de
+  suscripción y condiciones de mercado.
+
+### Robustez de datos IBKR
+
+- Fallback automático a datos delayed cuando no hay suscripción en
+  tiempo real para un mercado (confirmado MEFFRV, EUREX).
+- Poll específico para `modelGreeks` (tardan más que bid/ask),
+  fallback a `bidGreeks`/`askGreeks` si no convergen.
+- Peticiones de market data en lotes de 6 (evita saturar el límite
+  de 50 mensajes/segundo de IBKR).
+- Selección de strikes por **delta estimado** (Black-Scholes con IV
+  ATM de referencia), no por cercanía de precio — correcto para
+  subyacentes con IV alta como DRAM (~95%).
+- `tradingClass` fijado explícitamente para evitar mezclar clases
+  secundarias (bug confirmado con MSFT: `2MSFT`).
+- `underlying_price` del stock preferido sobre el del contrato de
+  opción (bug confirmado con ASML/EUREX: escala incorrecta).
+
+### CLI
+
+- `analyze TICKER [--long-term] [--currency EUR]`: análisis de un
+  ticker con tabla de candidatos (Score, Strike, OTM%, vs Buy Zone,
+  Expiration, Bid, Ask, Delta, IV, Open Int, Recommendation).
+- `watchlist [TICKERS...] [--long-term] [--currency EUR]`: análisis
+  de múltiples tickers con tabla resumen (candidatos encontrados,
+  mejor score/strike/OTM%, motivo de rechazo si no hay candidatos).
+  Sin argumentos, recorre todo el ATLAS ordenado por convicción
+  (alcista/posicion primero).
+- Tabla "Company" muestra Max Entry y Buy Zone de ATLAS cuando
+  existen.
+- Avisos claros cuando AlphaVantage falla (rate-limit o ticker no
+  reconocido), cuando el ticker no está aprobado en ATLAS, o cuando
+  el mercado devuelve datos incompletos.
+
+### Calidad
+
+- 143 tests (unitarios + integración), `mypy` 0 errores, `ruff`
+  limpio.
+- `data/iv_history.db` excluido de git (histórico local, personal).
+- `GITHUB_TOKEN`, `ATLAS_REPO`, `IV_HISTORY_DB_PATH`,
+  `ALPHA_VANTAGE_API_KEY` configurables vía `.env`.
 
 ## Lo que NO funciona todavía / limitaciones conocidas
 
