@@ -117,3 +117,17 @@ long_term_put:
   scan_dte_window:
     min: 90
     max: 365
+
+  # Spreads estructuralmente más anchos en opciones de largo plazo
+  # (confirmado con NFLX: el único candidato que pasó el 5% del CSP
+  # recurrente era el de jun-2027, mientras strikes con delta correcto
+  # en vencimientos de dic-2026 y mar-2027 tenían spreads de 6-8%).
+  spread:
+    maximum_percent: 10
+
+  # Volumen más bajo aceptable: las opciones de 90-365 días tienen
+  # mucho menos volumen diario que las de 30-45 días, pero el
+  # open interest suele ser alto (posiciones acumuladas a largo plazo).
+  liquidity:
+    minimum_volume: 0
+    minimum_open_interest: 100

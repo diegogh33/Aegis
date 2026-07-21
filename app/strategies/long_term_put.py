@@ -42,8 +42,8 @@ class LongTermPutStrategy(Strategy):
                 NoUpcomingEarningsRule(),
                 DTERule(config_section="long_term_put"),
                 DeltaRule(config_section="long_term_put"),
-                LiquidityRule(),
-                SpreadRule(),
+                LiquidityRule(config_section="long_term_put"),
+                SpreadRule(config_section="long_term_put"),
                 BelowBuyZoneRule(),
                 IVRankRule(
                     repository=iv_history_repository,

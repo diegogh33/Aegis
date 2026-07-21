@@ -32,13 +32,14 @@ class LiquidityRule(Rule):
         minimum_volume: int | None = None,
         minimum_open_interest: int | None = None,
         settings: Settings | None = None,
+        config_section: str = "cash_secured_put",
     ):
         if minimum_volume is None or minimum_open_interest is None:
 
             settings = settings or Settings()
 
             liquidity_config = settings.get(
-                "cash_secured_put", "liquidity"
+                config_section, "liquidity"
             )
 
             if minimum_volume is None:

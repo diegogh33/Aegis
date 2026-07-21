@@ -11,8 +11,11 @@ class SpreadRule(Rule):
     Evaluates whether an option contract's bid/ask spread is tight
     enough to be tradeable without excessive slippage.
 
-    Reads its threshold from constitution.yaml (cash_secured_put.
-    spread.maximum_percent) via Settings.
+    Reads its threshold from constitution.yaml (<config_section>.
+    spread.maximum_percent) via Settings. config_section defaults to
+    "cash_secured_put"; the long-term strategy uses config_section=
+    "long_term_put" to allow wider spreads (long-dated options
+    structurally have wider spreads than short-dated ones).
 
     Missing market data (bid or ask is None) is treated as PASS, not
     FAIL - same "keep the contract during development" behavior as
@@ -30,12 +33,13 @@ class SpreadRule(Rule):
         self,
         maximum_percent: Decimal | None = None,
         settings: Settings | None = None,
+        config_section: str = "cash_secured_put",
     ):
         if maximum_percent is None:
 
             settings = settings or Settings()
 
-            spread_config = settings.get("cash_secured_put", "spread")
+            spread_config = settings.get(config_section, "spread")
 
             maximum_percent = Decimal(
                 str(spread_config["maximum_percent"])

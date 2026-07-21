@@ -60,3 +60,21 @@ def test_reads_threshold_from_constitution_yaml_by_default():
     rule = SpreadRule()
 
     assert rule.maximum_percent == Decimal("5")
+
+
+def test_long_term_section_uses_wider_spread_threshold():
+    """
+    Regression test from real NFLX --long-term run: the mar-2027
+    strike 55 (spread 6.6%) and jun-2027 strike 56 (spread 9.2%)
+    were valid long-term candidates that would have been rejected
+    under the recurring 5% limit. long_term_put.spread.maximum_percent
+    is 10 in constitution.yaml, allowing these through.
+    """
+    rule = SpreadRule(config_section="long_term_put")
+
+    assert rule.maximum_percent == Decimal("10")
+
+    # 6.6% spread (mar-2027 strike 55): passes long_term, fails recurring
+    candidate_66 = _candidate_with(bid=Decimal("2.85"), ask=Decimal("3.05"))
+    assert SpreadRule(maximum_percent=Decimal("10")).evaluate(candidate_66).status is RuleStatus.PASS
+    assert SpreadRule(maximum_percent=Decimal("5")).evaluate(candidate_66).status is RuleStatus.FAIL
