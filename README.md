@@ -653,54 +653,64 @@ tratarse como un check real, no solo informativo — si un cambio
 introduce un error de tipos nuevo, es una señal a atender antes de
 dar el cambio por terminado.
 
-## Ejecutar el CLI contra datos reales
+## Comandos disponibles
 
-Requiere IBKR (TWS/Gateway) corriendo en `127.0.0.1:7496` y una API key
-de Alpha Vantage configurada como variable de entorno. Opcionalmente,
-`GITHUB_TOKEN` (un Personal Access Token de solo lectura) para
-consultar ATLAS sin toparse con el rate-limit de 60 peticiones/hora
-sin autenticar de la API de GitHub — funciona sin él porque el repo es
-público, pero cualquier otro tráfico desde la misma IP puede agotarlo.
-`ATLAS_REPO` (por defecto `diegogh33/atlas-research`) permite apuntar
-a otro repo de análisis si hiciera falta. `IV_HISTORY_DB_PATH` (por
-defecto `data/iv_history.db`) permite cambiar dónde se guarda el
-histórico local de IV usado por `IVRankRule` — el fichero se crea
-solo si no existe, y no está versionado en git (es histórico
-específico de cada máquina).
+Requiere IBKR (TWS/Gateway) corriendo en `127.0.0.1:7496`. Todos los
+comandos se ejecutan desde la carpeta del proyecto en PowerShell.
 
-``` bash
+### Análisis de un solo ticker
+
+``` powershell
+# Estrategia recurrente (30-45 DTE, delta -0.15/-0.25) — tabla detallada
 uv run python -m app.main AAPL
-```
 
-Para tickers no estadounidenses (ej. acciones españolas cotizando
-opciones en MEFF), pasa `--currency`:
-
-``` bash
-uv run python -m app.main SAN --currency EUR
-```
-
-`--exchange` normalmente se deja en `SMART` (SmartRouting de IBKR
-encuentra el mercado correcto solo); solo hace falta especificarlo si
-necesitas forzar un enrutamiento concreto. Nota: `AlphaVantageProvider`
-sigue usando el ticker tal cual para los datos fundamentales de la
-empresa — si el símbolo necesita un sufijo distinto en AlphaVantage
-para mercados no estadounidenses (ej. `SAN.MC`), eso no está resuelto
-todavía; solo afecta a la tabla "Company", no a la de opciones.
-
-Para la estrategia oportunista de largo plazo (caídas de alta
-convicción, DTE 90-365 días), pasa `--long-term`:
-
-``` bash
+# Largo plazo (90-365 DTE, delta -0.10/-0.30) — tabla detallada
 uv run python -m app.main ACN --long-term
+
+# Mercado europeo
+uv run python -m app.main ASML --currency EUR
+uv run python -m app.main ASML --currency EUR --long-term
 ```
 
-Es un comando separado de la estrategia recurrente — no se ejecutan
-ambas a la vez. Ver la sección de arquitectura sobre
-`LongTermPutStrategy` para el diseño completo.
+### Análisis de varios tickers explícitos — tabla resumen
 
-Esto **no se puede validar en un entorno aislado sin conexión a IBKR**;
-es la parte que cada colaborador debe probar en su propia máquina antes
-de dar un cambio por terminado.
+``` powershell
+# Recurrente
+uv run python -m app.main NFLX AAPL ACN
+
+# Largo plazo
+uv run python -m app.main NFLX UBER DHR --long-term
+
+# Europeos
+uv run python -m app.main ASML SAP --currency EUR --long-term
+```
+
+### Watchlist automático desde ATLAS
+
+``` powershell
+# Recorre todos los tickers de ATLAS (alcista + posicion + seguimiento),
+# filtrando los que están >10% por encima de su zona de compra.
+# Aprobados primero, luego seguimiento.
+uv run python -m app.main watchlist
+
+# Largo plazo
+uv run python -m app.main watchlist --long-term
+
+# Europeos en ATLAS
+uv run python -m app.main watchlist --currency EUR --long-term
+```
+
+### Notas
+
+- `--long-term` siempre se añade al final del comando.
+- `--currency EUR` para cualquier ticker que cotice en Europa.
+- Para tickers explícitos, el watchlist **no** aplica el filtro de
+  precio — los analiza siempre.
+- El watchlist automático **sí** aplica el filtro: salta tickers cuyo
+  precio actual supera el `entrada_max` de ATLAS en más de un 10%.
+- Los datos de Open Interest solo llegan con el mercado US abierto
+  (15:30-22:00 hora Madrid). Fuera de ese horario, la columna
+  mostrará `-` en algunos strikes.
 
 ------------------------------------------------------------------------
 
