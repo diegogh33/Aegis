@@ -110,3 +110,49 @@ async def test_one_broken_entry_does_not_break_the_whole_index():
 
     assert entry is not None
     assert entry.ticker == "ACN"
+
+
+@pytest.mark.asyncio
+async def test_get_all_entries_approved_before_watchlist_alphabetical_within():
+    """
+    get_all_entries() drives the watchlist auto-scan order:
+    alcista/posicion entries should come before seguimiento, and within
+    each group entries should be sorted alphabetically by ticker.
+    """
+    seguimiento_content = """---
+ticker: ZTS
+nombre: Zoetis
+valoracion: seguimiento
+---
+"""
+    posicion_content = """---
+ticker: ARE
+nombre: Alexandria
+valoracion: posicion
+---
+"""
+    alcista_content = """---
+ticker: NOW
+nombre: ServiceNow
+valoracion: alcista
+---
+"""
+
+    client = AsyncMock()
+    client.list_analyses.return_value = ["ZTS.md", "ARE.md", "NOW.md"]
+    client.get_file_content.side_effect = lambda f: {
+        "ZTS.md": seguimiento_content,
+        "ARE.md": posicion_content,
+        "NOW.md": alcista_content,
+    }[f]
+
+    provider = AtlasProvider(client=client)
+    entries = await provider.get_all_entries()
+
+    tickers = [e.ticker for e in entries]
+
+    # ARE (posicion) and NOW (alcista) before ZTS (seguimiento)
+    assert tickers.index("ZTS") > tickers.index("ARE")
+    assert tickers.index("ZTS") > tickers.index("NOW")
+    # ARE before NOW alphabetically within approved group
+    assert tickers.index("ARE") < tickers.index("NOW")

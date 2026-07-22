@@ -81,6 +81,22 @@ def build_summary(ticker: str, atlas_valoracion: str | None, result) -> TickerSu
     )
 
 
+def sort_summaries(summaries: list[TickerSummary]) -> list[TickerSummary]:
+    """
+    Sorts summaries for display: tickers with candidates first (by
+    score descending), then tickers with no candidates (by ticker
+    name). Pure function so it can be tested independently of the
+    Rich table rendering.
+    """
+    return sorted(
+        summaries,
+        key=lambda s: (
+            0 if s.candidates > 0 else 1,
+            -(s.best_score or 0),
+        ),
+    )
+
+
 def print_summary_table(summaries: list[TickerSummary], long_term: bool) -> None:
     """Renders the summary table used by both analyze (multi) and watchlist."""
 
@@ -88,14 +104,7 @@ def print_summary_table(summaries: list[TickerSummary], long_term: bool) -> None
     console.rule("[bold]Summary[/]")
     console.print()
 
-    # Sort: tickers with candidates first (by score desc), then no-candidates
-    sorted_summaries = sorted(
-        summaries,
-        key=lambda s: (
-            0 if s.candidates > 0 else 1,
-            -(s.best_score or 0),
-        ),
-    )
+    sorted_summaries = sort_summaries(summaries)
 
     summary_table = Table(
         title=(
