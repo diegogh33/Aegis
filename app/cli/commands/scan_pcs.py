@@ -121,7 +121,10 @@ async def _scan_pcs(
                     long_term=long_term,
                 )
 
-                contracts = [s.option for s in result.contracts]
+                contracts = (
+                    [s.option for s in result.contracts]
+                    + [r.option for r in result.rejected]
+                )
                 candidates = find_pcs_candidates(contracts)
 
                 passing = [c for c in candidates if c.passes_all]

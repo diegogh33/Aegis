@@ -256,10 +256,18 @@ def _render_pcs_table(result, ticker: str) -> None:
     """Renders the PCS candidates table below the main candidates table."""
     from app.strategies.pcs import PCS_MIN_OI, _mid, find_pcs_candidates
 
-    # Use ALL scanned contracts (not just those that passed Constitution)
-    # since the long leg of a PCS might be a deeper OTM strike that was
-    # rejected individually but is valid as protection.
-    all_contracts = [s.option for s in result.contracts]
+    # Use ALL scanned contracts (passed + rejected) for PCS analysis.
+    # A contract rejected by Constitution individually (e.g. low volume,
+    # wide spread, delta outside range) can still be a valid long leg
+    # for protection in a PCS. Only the short leg needs to pass; the
+    # long leg just needs bid/ask data available.
+    # Confirmed with MU: all 15 contracts were rejected for LIQUIDITY
+    # (volume < 50) so result.contracts was empty, but the contracts
+    # had valid bid/ask and OI data perfectly usable for PCS pairs.
+    all_contracts = (
+        [s.option for s in result.contracts]
+        + [r.option for r in result.rejected]
+    )
 
     if not all_contracts:
         console.print(
