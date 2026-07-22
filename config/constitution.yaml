@@ -147,3 +147,38 @@ watchlist:
     - PG
     - DEO
     - MAIN
+
+# Universo de candidatos para scan-pcs (del Plan Operativo v2.3)
+# S2: venta de prima pura — sistemática y oportunista
+s2_universe:
+  - AMD
+  - MU
+  - PYPL
+  - COIN
+  - SOFI
+  - SMCI
+  - XLE
+  - XOP
+  - KRE
+  - RKLB
+  - CELH
+  - TMDX
+  - IREN
+  - BABA
+  - NOW
+
+# S3: spreads tácticos en ETFs (solo cuando VIX > 18 y IVR ≥ 30)
+s3_universe:
+  - SPY
+  - QQQ
+  - IWM
+  - XSP
+  - XLE
+  - XLF
+  - XLK
+  - XOP
+  - KRE
+  - TLT
+  - GLD
+  - EWY
+  - DRAM

@@ -700,6 +700,34 @@ uv run python -m app.main watchlist --long-term
 uv run python -m app.main watchlist --currency EUR --long-term
 ```
 
+### Put Credit Spread (PCS)
+
+``` powershell
+# Análisis individual con tabla de spreads PCS debajo de los candidatos
+uv run python -m app.main ORCL --pcs
+uv run python -m app.main AMD --pcs
+
+# Scan automático del universo S2 (sistemático)
+uv run python -m app.main scan-pcs s2
+
+# Scan automático del universo S3 (ETFs tácticos)
+uv run python -m app.main scan-pcs s3
+
+# Combinable con largo plazo
+uv run python -m app.main scan-pcs s2 --long-term
+```
+
+Los universos S2 y S3 se configuran en `constitution.yaml`
+(`s2_universe` / `s3_universe`). Los filtros de PCS son:
+crédito/ancho ≥ 25% y OI ≥ 500 en ambas patas.
+
+### IV History
+
+``` powershell
+# Ver progreso de acumulación de histórico IV por ticker
+uv run python -m app.main iv-history
+```
+
 ### Notas
 
 - `--long-term` siempre se añade al final del comando.
