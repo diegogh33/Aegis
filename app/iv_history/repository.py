@@ -72,6 +72,39 @@ class IVHistoryRepository:
                 ),
             )
 
+    def summary_by_ticker(self) -> list[dict]:
+        """
+        Returns a summary row per ticker: ticker, days recorded,
+        first snapshot date, last snapshot date, and latest IV.
+        Ordered by days recorded descending (most progress first).
+        """
+
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT
+                    ticker,
+                    COUNT(*) AS days,
+                    MIN(day) AS first_day,
+                    MAX(day) AS last_day,
+                    implied_volatility AS latest_iv
+                FROM iv_snapshots
+                GROUP BY ticker
+                ORDER BY days DESC, ticker ASC
+                """
+            ).fetchall()
+
+        return [
+            {
+                "ticker": row[0],
+                "days": row[1],
+                "first_day": date.fromisoformat(row[2]),
+                "last_day": date.fromisoformat(row[3]),
+                "latest_iv": Decimal(row[4]),
+            }
+            for row in rows
+        ]
+
     def history(
         self,
         ticker: str,

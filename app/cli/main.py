@@ -3,6 +3,7 @@ import sys
 import typer
 
 from app.cli.commands.analyze import analyze
+from app.cli.commands.iv_history import iv_history
 from app.cli.commands.watchlist import watchlist
 
 app = typer.Typer(
@@ -11,8 +12,9 @@ app = typer.Typer(
 
 app.command()(analyze)
 app.command()(watchlist)
+app.command(name="iv-history")(iv_history)
 
-_KNOWN_COMMANDS = {"analyze", "watchlist", "--help", "-h", "--version"}
+_KNOWN_COMMANDS = {"analyze", "watchlist", "iv-history", "--help", "-h", "--version"}
 
 
 def main() -> None:

@@ -111,3 +111,36 @@ def test_history_returns_oldest_first(tmp_path):
     history = repo.history("AAPL", lookback_days=30, today=today)
 
     assert [s.day for s in history] == sorted(s.day for s in history)
+
+
+def test_summary_by_ticker_returns_counts_and_dates(tmp_path):
+    repo = IVHistoryRepository(str(tmp_path / "iv.db"))
+
+    today = date(2026, 7, 15)
+
+    for i in range(5):
+        repo.record(
+            IVSnapshot(
+                ticker="AAPL",
+                day=today - timedelta(days=i),
+                implied_volatility=Decimal("0.30"),
+            )
+        )
+    repo.record(
+        IVSnapshot(
+            ticker="ACN",
+            day=today,
+            implied_volatility=Decimal("0.47"),
+        )
+    )
+
+    summaries = repo.summary_by_ticker()
+
+    assert len(summaries) == 2
+    # AAPL has more days, should be first
+    assert summaries[0]["ticker"] == "AAPL"
+    assert summaries[0]["days"] == 5
+    assert summaries[0]["first_day"] == today - timedelta(days=4)
+    assert summaries[0]["last_day"] == today
+    assert summaries[1]["ticker"] == "ACN"
+    assert summaries[1]["days"] == 1
