@@ -256,14 +256,6 @@ def _render_pcs_table(result, ticker: str) -> None:
     """Renders the PCS candidates table below the main candidates table."""
     from app.strategies.pcs import PCS_MIN_OI, _mid, find_pcs_candidates
 
-    # Use ALL scanned contracts (passed + rejected) for PCS analysis.
-    # A contract rejected by Constitution individually (e.g. low volume,
-    # wide spread, delta outside range) can still be a valid long leg
-    # for protection in a PCS. Only the short leg needs to pass; the
-    # long leg just needs bid/ask data available.
-    # Confirmed with MU: all 15 contracts were rejected for LIQUIDITY
-    # (volume < 50) so result.contracts was empty, but the contracts
-    # had valid bid/ask and OI data perfectly usable for PCS pairs.
     all_contracts = (
         [s.option for s in result.contracts]
         + [r.option for r in result.rejected]
@@ -285,36 +277,40 @@ def _render_pcs_table(result, ticker: str) -> None:
         )
         return
 
-    pcs_table = Table(
-        title=f"PCS Candidates — {ticker} "
-              f"(crédito/ancho ≥25%, OI ≥{PCS_MIN_OI} ambas patas)"
-    )
+    passing = [c for c in candidates if c.passes_all]
 
-    pcs_table.add_column("Short", justify="right", style="bold")
-    pcs_table.add_column("Long", justify="right")
-    pcs_table.add_column("Expiration")
-    pcs_table.add_column("Ancho", justify="right")
-    pcs_table.add_column("Mid Short", justify="right")
-    pcs_table.add_column("Mid Long", justify="right")
-    pcs_table.add_column("Crédito", justify="right")
-    pcs_table.add_column("Cr/Ancho", justify="right")
-    pcs_table.add_column("Break-even", justify="right")
-    pcs_table.add_column("OI Short", justify="right")
-    pcs_table.add_column("OI Long", justify="right")
-    pcs_table.add_column("✓")
-
-    for c in candidates:
+    def _pcs_row(c, rank: int | None = None):
+        """Build a table row for a PCS candidate."""
+        mid_short = _mid(c.short) or Decimal("0")
+        mid_long = _mid(c.long) or Decimal("0")
 
         oi_short_str = (
             str(c.short.open_interest)
-            if c.short.open_interest is not None
-            else "-"
+            if c.short.open_interest is not None else "-"
         )
         oi_long_str = (
             str(c.long.open_interest)
-            if c.long.open_interest is not None
-            else "-"
+            if c.long.open_interest is not None else "-"
         )
+
+        ratio_str = f"[green]{c.credit_ratio:.1%}[/]" if c.passes_credit_ratio else f"[red]{c.credit_ratio:.1%}[/]"
+
+        oi_short_disp = oi_short_str if c.short_oi_ok else f"[red]{oi_short_str}[/]"
+        oi_long_disp = oi_long_str if c.long_oi_ok else f"[red]{oi_long_str}[/]"
+
+        # Delta of the short leg (from the option if available)
+        delta_str = (
+            f"{c.short.delta:.3f}"
+            if c.short.delta is not None else "-"
+        )
+
+        # % the underlying must fall to reach break-even
+        underlying = c.short.underlying_price
+        if underlying and underlying > 0:
+            drop_pct = (underlying - c.break_even) / underlying * 100
+            drop_str = f"{drop_pct:.1f}%"
+        else:
+            drop_str = "-"
 
         if c.passes_all:
             status = "[bold green]✅ PASA[/]"
@@ -325,23 +321,10 @@ def _render_pcs_table(result, ticker: str) -> None:
         else:
             status = "[red]❌[/]"
 
-        oi_short_display = (
-            f"[red]{oi_short_str}[/]" if not c.short_oi_ok else oi_short_str
-        )
-        oi_long_display = (
-            f"[red]{oi_long_str}[/]" if not c.long_oi_ok else oi_long_str
-        )
+        label = f"[bold cyan]#{rank}[/]" if rank else ""
 
-        ratio_display = f"{c.credit_ratio:.1%}"
-        if c.passes_credit_ratio:
-            ratio_display = f"[green]{ratio_display}[/]"
-        else:
-            ratio_display = f"[red]{ratio_display}[/]"
-
-        mid_short = _mid(c.short) or Decimal("0")
-        mid_long = _mid(c.long) or Decimal("0")
-
-        pcs_table.add_row(
+        return (
+            label,
             f"${c.short.strike}",
             f"${c.long.strike}",
             str(c.short.expiration),
@@ -349,17 +332,58 @@ def _render_pcs_table(result, ticker: str) -> None:
             f"${float(mid_short):.2f}",
             f"${float(mid_long):.2f}",
             f"${c.credit_mid:.2f}",
-            ratio_display,
+            ratio_str,
             f"${c.break_even:.2f}",
-            oi_short_display,
-            oi_long_display,
+            drop_str,
+            delta_str,
+            oi_short_disp,
+            oi_long_disp,
             status,
         )
 
-    console.print()
-    console.print(pcs_table)
+    def _make_table(title: str) -> Table:
+        t = Table(title=title)
+        t.add_column("#", justify="center", width=3)
+        t.add_column("Short", justify="right", style="bold")
+        t.add_column("Long", justify="right")
+        t.add_column("Exp")
+        t.add_column("Ancho", justify="right")
+        t.add_column("Mid Short", justify="right")
+        t.add_column("Mid Long", justify="right")
+        t.add_column("Crédito", justify="right")
+        t.add_column("Cr/Ancho", justify="right")
+        t.add_column("Break-even", justify="right")
+        t.add_column("Caída %", justify="right")
+        t.add_column("Δ Short", justify="right")
+        t.add_column("OI Short", justify="right")
+        t.add_column("OI Long", justify="right")
+        t.add_column("✓")
+        return t
 
-    passing = [c for c in candidates if c.passes_all]
+    console.print()
+
+    # ── Top 3 PASA — highlighted section ──────────────────────────────
+    if passing:
+        top3 = passing[:3]
+        top_table = _make_table(
+            f"🏆 Top Candidatos PCS — {ticker} "
+            f"(mejores {len(top3)} de {len(passing)} que pasan)"
+        )
+        for i, c in enumerate(top3, 1):
+            top_table.add_row(*_pcs_row(c, rank=i))
+        console.print(top_table)
+        console.print()
+
+    # ── Full table ─────────────────────────────────────────────────────
+    full_table = _make_table(
+        f"PCS Candidates — {ticker} "
+        f"(crédito/ancho ≥25%, OI ≥{PCS_MIN_OI} ambas patas)"
+    )
+    for c in candidates:
+        rank = (passing.index(c) + 1) if c in passing[:3] else None
+        full_table.add_row(*_pcs_row(c, rank=rank))
+
+    console.print(full_table)
     console.print(
         f"\n[bold green]{len(passing)}[/] of [bold]{len(candidates)}[/] "
         f"PCS combinations pass all filters."

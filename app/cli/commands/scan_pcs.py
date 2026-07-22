@@ -211,6 +211,8 @@ def _render_results_table(
     table.add_column("Crédito", justify="right")
     table.add_column("Cr/Ancho", justify="right")
     table.add_column("Break-even", justify="right")
+    table.add_column("Caída %", justify="right")
+    table.add_column("Δ Short", justify="right")
     table.add_column("OI Short", justify="right")
     table.add_column("OI Long", justify="right")
 
@@ -223,13 +225,11 @@ def _render_results_table(
 
         oi_short = (
             str(c.short.open_interest)
-            if c.short.open_interest is not None
-            else "-"
+            if c.short.open_interest is not None else "-"
         )
         oi_long = (
             str(c.long.open_interest)
-            if c.long.open_interest is not None
-            else "-"
+            if c.long.open_interest is not None else "-"
         )
 
         ratio_str = f"{c.credit_ratio:.1%}"
@@ -239,6 +239,18 @@ def _render_results_table(
         if dim:
             oi_short = f"[yellow]{oi_short}[/]" if not c.short_oi_ok else oi_short
             oi_long = f"[yellow]{oi_long}[/]" if not c.long_oi_ok else oi_long
+
+        delta_str = (
+            f"{c.short.delta:.3f}"
+            if c.short.delta is not None else "-"
+        )
+
+        underlying = c.short.underlying_price
+        if underlying and underlying > 0:
+            drop_pct = (underlying - c.break_even) / underlying * 100
+            drop_str = f"{drop_pct:.1f}%"
+        else:
+            drop_str = "-"
 
         table.add_row(
             ticker,
@@ -251,6 +263,8 @@ def _render_results_table(
             f"${c.credit_mid:.2f}",
             ratio_str,
             f"${c.break_even:.2f}",
+            drop_str,
+            delta_str,
             oi_short,
             oi_long,
         )
