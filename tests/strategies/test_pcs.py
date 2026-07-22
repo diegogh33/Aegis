@@ -1,0 +1,104 @@
+from __future__ import annotations
+
+from dataclasses import replace
+from datetime import date
+from decimal import Decimal
+
+from app.strategies.pcs import PCS_MIN_OI, find_pcs_candidates
+from tests.conftest import build_option
+
+
+def _contract(
+    strike: float,
+    bid: float,
+    ask: float,
+    open_interest: int | None = 600,
+    dte: int = 35,
+):
+    return replace(
+        build_option(delta=-0.20, dte=dte),
+        strike=Decimal(str(strike)),
+        bid=Decimal(str(bid)),
+        ask=Decimal(str(ask)),
+        open_interest=open_interest,
+    )
+
+
+def test_generates_pcs_combination_from_two_contracts():
+    short = _contract(strike=110, bid=3.20, ask=3.70)
+    long = _contract(strike=100, bid=1.37, ask=1.77)
+
+    candidates = find_pcs_candidates([short, long])
+
+    assert len(candidates) == 1
+    c = candidates[0]
+    assert c.short.strike == Decimal("110")
+    assert c.long.strike == Decimal("100")
+    assert c.width == Decimal("10")
+    # mid_short = (3.20 + 3.70) / 2 = 3.45
+    # mid_long  = (1.37 + 1.77) / 2 = 1.57
+    # credit    = 3.45 - 1.57 = 1.88
+    assert abs(c.credit_mid - Decimal("1.88")) < Decimal("0.01")
+    # ratio = 1.88 / 10 = 18.8% — below 25%
+    assert not c.passes_credit_ratio
+
+
+def test_pcs_passes_when_credit_ratio_above_25_percent():
+    # SPOT real example from plan: PCS 390/370, credit ~$5.60, ancho $20 → 28%
+    short = _contract(strike=390, bid=5.40, ask=5.80)
+    long = _contract(strike=370, bid=0.10, ask=0.30)
+
+    candidates = find_pcs_candidates([short, long])
+
+    assert len(candidates) == 1
+    c = candidates[0]
+    assert c.passes_credit_ratio
+
+
+def test_groups_by_expiration_no_cross_expiry_pairs():
+    short_aug = _contract(strike=110, bid=3.20, ask=3.70, dte=35)
+    long_sep = replace(
+        _contract(strike=100, bid=1.37, ask=1.77, dte=65),
+        expiration=date.today().replace(month=9),
+    )
+
+    candidates = find_pcs_candidates([short_aug, long_sep])
+
+    # Different expirations — no valid pair
+    assert len(candidates) == 0
+
+
+def test_oi_flag_correctly_marks_low_oi_legs():
+    short = _contract(strike=110, bid=3.20, ask=3.70, open_interest=50)
+    long = _contract(strike=100, bid=1.37, ask=1.77, open_interest=600)
+
+    candidates = find_pcs_candidates([short, long])
+
+    assert len(candidates) == 1
+    c = candidates[0]
+    assert not c.short_oi_ok
+    assert c.long_oi_ok
+    assert not c.oi_ok
+    assert not c.passes_all
+
+
+def test_passing_spreads_sorted_before_failing():
+    # Two spreads: one passes ratio, one doesn't
+    contracts = [
+        _contract(strike=120, bid=6.10, ask=7.00),   # high mid ~6.55
+        _contract(strike=110, bid=3.20, ask=3.70),   # mid 3.45
+        _contract(strike=100, bid=1.37, ask=1.77),   # mid 1.57
+    ]
+
+    candidates = find_pcs_candidates(contracts)
+
+    # 120/110 → credit = 6.55 - 3.45 = 3.10, ratio = 31% → passes
+    # 120/100 → credit = 6.55 - 1.57 = 4.98, ratio = 24.9% → just fails
+    # 110/100 → credit = 3.45 - 1.57 = 1.88, ratio = 18.8% → fails
+    assert candidates[0].passes_credit_ratio
+    assert candidates[0].short.strike == Decimal("120")
+    assert candidates[0].long.strike == Decimal("110")
+
+
+def test_pcs_min_oi_constant_is_500():
+    assert PCS_MIN_OI == 500

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import Counter
+from decimal import Decimal
 
 from rich.console import Console
 from rich.table import Table
@@ -25,6 +26,7 @@ def analyze(
     exchange: str = "SMART",
     currency: str = "USD",
     long_term: bool = False,
+    pcs: bool = False,
 ) -> None:
     """
     Analyzes one or more tickers for Cash Secured PUT candidates.
@@ -37,6 +39,10 @@ def analyze(
 
     --long-term switches to the opportunistic long-dated PUT strategy
     (90-365 DTE). --currency EUR for European underlyings.
+
+    --pcs additionally shows Put Credit Spread combinations between
+    the scanned contracts, evaluating credit/width ratio (≥25% to pass
+    per Plan Operativo S2/S3) and OI on both legs (≥500 each).
     """
     asyncio.run(
         _analyze(
@@ -44,6 +50,7 @@ def analyze(
             exchange=exchange,
             currency=currency,
             long_term=long_term,
+            pcs=pcs,
         )
     )
 
@@ -53,6 +60,7 @@ async def _analyze(
     exchange: str,
     currency: str,
     long_term: bool,
+    pcs: bool = False,
 ) -> None:
 
     alpha = AlphaVantageProvider()
@@ -79,7 +87,9 @@ async def _analyze(
         )
 
         if len(tickers) == 1:
-            await _single(tickers[0], exchange, currency, long_term, service)
+            await _single(
+                tickers[0], exchange, currency, long_term, service, pcs=pcs
+            )
         else:
             await _multi(tickers, exchange, currency, long_term, service)
 
@@ -98,6 +108,7 @@ async def _single(
     currency: str,
     long_term: bool,
     service: AnalysisService,
+    pcs: bool = False,
 ) -> None:
 
     result = await service.analyze(
@@ -236,6 +247,115 @@ async def _single(
             "or had usable market data.[/] See 'Rejected Contracts' "
             "above for why."
         )
+
+    if pcs:
+        _render_pcs_table(result, ticker)
+
+
+def _render_pcs_table(result, ticker: str) -> None:
+    """Renders the PCS candidates table below the main candidates table."""
+    from app.strategies.pcs import PCS_MIN_OI, _mid, find_pcs_candidates
+
+    # Use ALL scanned contracts (not just those that passed Constitution)
+    # since the long leg of a PCS might be a deeper OTM strike that was
+    # rejected individually but is valid as protection.
+    all_contracts = [s.option for s in result.contracts]
+
+    if not all_contracts:
+        console.print(
+            "\n[bold yellow]No contracts with market data available "
+            "for PCS analysis.[/]"
+        )
+        return
+
+    candidates = find_pcs_candidates(all_contracts)
+
+    if not candidates:
+        console.print(
+            "\n[dim]No PCS combinations found with positive credit "
+            "and available bid/ask data.[/]"
+        )
+        return
+
+    pcs_table = Table(
+        title=f"PCS Candidates — {ticker} "
+              f"(crédito/ancho ≥25%, OI ≥{PCS_MIN_OI} ambas patas)"
+    )
+
+    pcs_table.add_column("Short", justify="right", style="bold")
+    pcs_table.add_column("Long", justify="right")
+    pcs_table.add_column("Expiration")
+    pcs_table.add_column("Ancho", justify="right")
+    pcs_table.add_column("Mid Short", justify="right")
+    pcs_table.add_column("Mid Long", justify="right")
+    pcs_table.add_column("Crédito", justify="right")
+    pcs_table.add_column("Cr/Ancho", justify="right")
+    pcs_table.add_column("Break-even", justify="right")
+    pcs_table.add_column("OI Short", justify="right")
+    pcs_table.add_column("OI Long", justify="right")
+    pcs_table.add_column("✓")
+
+    for c in candidates:
+
+        oi_short_str = (
+            str(c.short.open_interest)
+            if c.short.open_interest is not None
+            else "-"
+        )
+        oi_long_str = (
+            str(c.long.open_interest)
+            if c.long.open_interest is not None
+            else "-"
+        )
+
+        if c.passes_all:
+            status = "[bold green]✅ PASA[/]"
+        elif c.passes_credit_ratio and not c.oi_ok:
+            status = "[yellow]⚠ OI bajo[/]"
+        elif not c.passes_credit_ratio and c.oi_ok:
+            status = "[red]❌ Cr/ancho[/]"
+        else:
+            status = "[red]❌[/]"
+
+        oi_short_display = (
+            f"[red]{oi_short_str}[/]" if not c.short_oi_ok else oi_short_str
+        )
+        oi_long_display = (
+            f"[red]{oi_long_str}[/]" if not c.long_oi_ok else oi_long_str
+        )
+
+        ratio_display = f"{c.credit_ratio:.1%}"
+        if c.passes_credit_ratio:
+            ratio_display = f"[green]{ratio_display}[/]"
+        else:
+            ratio_display = f"[red]{ratio_display}[/]"
+
+        mid_short = _mid(c.short) or Decimal("0")
+        mid_long = _mid(c.long) or Decimal("0")
+
+        pcs_table.add_row(
+            f"${c.short.strike}",
+            f"${c.long.strike}",
+            str(c.short.expiration),
+            f"${c.width:.0f}",
+            f"${float(mid_short):.2f}",
+            f"${float(mid_long):.2f}",
+            f"${c.credit_mid:.2f}",
+            ratio_display,
+            f"${c.break_even:.2f}",
+            oi_short_display,
+            oi_long_display,
+            status,
+        )
+
+    console.print()
+    console.print(pcs_table)
+
+    passing = [c for c in candidates if c.passes_all]
+    console.print(
+        f"\n[bold green]{len(passing)}[/] of [bold]{len(candidates)}[/] "
+        f"PCS combinations pass all filters."
+    )
 
 
 async def _multi(
