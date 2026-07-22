@@ -830,13 +830,35 @@ Claude leerá el README (sección "Lo que funciona hoy"), consultará la
 memoria de la cuenta donde está el contexto de Aegis, y estará listo
 para continuar sin que tengas que re-explicar nada.
 
-## Pendientes al cierre de la última sesión (21-jul-2026)
+## Pendientes al cierre de la última sesión (22-jul-2026)
 
--   Probar `watchlist` completo con mercado US abierto (15:30-22:00
-    Madrid) — solo se ha probado con mercado cerrado hasta ahora.
--   Confirmar que `open_interest` llega correctamente con el nuevo
-    generic tick 101 añadido — posible que solo funcione en tiempo real.
--   Confirmar que `--long-term` funciona bien con datos en tiempo real
-    (AAPL, ACN u otro valor de ATLAS aprobado).
--   Recordar siempre probar con mercado US abierto antes de dar algo
-    por resuelto — Diego lo pidió explícitamente y sigue vigente.
+-   Probar `watchlist` completo con mercado US abierto para confirmar
+    que la tabla resumen muestra Bid/Ask/Delta/IV/Open Int con datos
+    reales — las columnas ya están implementadas pero solo se ha
+    validado con mercado cerrado.
+-   **Recordar siempre probar con mercado US abierto (15:30-22:00
+    Madrid) antes de dar algo por resuelto** — Diego lo pidió
+    explícitamente y sigue vigente.
+
+### Resuelto en la sesión del 22-jul
+
+-   ✅ Open Interest llegando correctamente — era `ticker.openInterest`
+    (campo genérico) en vez de `ticker.putOpenInterest` (campo
+    correcto para contratos PUT individuales). Confirmado con AAPL con
+    mercado abierto: todos los candidatos muestran Open Int real.
+-   ✅ `--long-term` validado con datos reales (DHR, NFLX, ASML).
+-   ✅ `watchlist` automático funcionando: filtro de precio (>10% sobre
+    `entrada_max`), lista de exclusión configurable en
+    `constitution.yaml` (sección `watchlist.exclude`), errores
+    excluidos de la tabla resumen.
+-   ✅ Tabla resumen con columnas completas: Score, Strike, OTM%, Bid,
+    Ask, Delta, IV, Open Int, Expiration, ordenada por Score.
+-   ✅ Múltiples tickers explícitos: `app.main NFLX UBER --long-term`
+    muestra tabla resumen; un solo ticker sigue mostrando tabla
+    detallada completa.
+-   ✅ Mensajes `tickSize: Unknown` y `tickOptionComputation: Unknown`
+    de `ib_async` suprimidos.
+-   ✅ `tradingClass` fijado explícitamente — corrige cadenas
+    contaminadas por clases secundarias (confirmado con MSFT: `2MSFT`).
+-   ✅ `underlying_price` del stock preferido sobre el del contrato de
+    opción — corrige OTM% disparado en ASML/EUREX (~83€ vs ~1576€ real).
