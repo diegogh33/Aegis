@@ -204,13 +204,6 @@ async def _watchlist(
 
         print_summary_table(summaries, long_term)
 
-        with_candidates = [s for s in summaries if s.candidates > 0]
-        analyzed = len(summaries)
-
-        console.print(
-            f"\n[bold green]{len(with_candidates)} of {analyzed} "
-            f"analyzed ticker(s) have candidates.[/]"
-        )
         if skipped:
             console.print(
                 f"[dim]{skipped} ticker(s) skipped (excluded or above "
