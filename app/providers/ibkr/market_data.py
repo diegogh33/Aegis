@@ -185,16 +185,15 @@ class MarketDataProvider:
 
     async def get(self, contract) -> MarketData:
 
+        import time
+        t0 = time.monotonic()
+
         ticker = await self._request_ticker(contract, genericTickList="100,101")
+
+        t1 = time.monotonic()
 
         greeks = ticker.modelGreeks
 
-        # modelGreeks (delta, gamma, theta, vega, IV) typically takes
-        # longer to populate than raw bid/ask/last, since it comes
-        # from IBKR's own model computation rather than a raw tick.
-        # _request_ticker() already confirmed there's a usable price
-        # by this point, so a short poll here is specifically for the
-        # Greeks catching up, not a full retry of the price fetch.
         if _has_any_price(ticker) and greeks is None:
 
             for _ in range(6):
@@ -206,23 +205,13 @@ class MarketDataProvider:
                 if greeks is not None:
                     break
 
+        t2 = time.monotonic()
+
         greeks_source = "model"
 
-        # For less liquid strikes, IBKR's model computation may never
-        # converge even with a price available - modelGreeks stays
-        # None indefinitely, not just slow to arrive. bidGreeks/
-        # askGreeks are computed directly from the quoted bid/ask
-        # price rather than the model's own "fair" price, so they can
-        # differ slightly (especially with a wide spread), but a
-        # slightly-approximate delta is more useful than none at all
-        # for a strike that otherwise has real quotes.
         if greeks is None:
             greeks, greeks_source = _select_greeks(ticker)
 
-        # openInterest updates once at session start rather than
-        # tick-by-tick, so it can take longer than the 2-second wait
-        # in _request_ticker to arrive - poll briefly if it's missing
-        # despite having a valid price.
         if _has_any_price(ticker) and math.isnan(ticker.putOpenInterest):
 
             for _ in range(8):
@@ -231,6 +220,24 @@ class MarketDataProvider:
 
                 if not math.isnan(ticker.putOpenInterest):
                     break
+
+        t3 = time.monotonic()
+
+        symbol = getattr(contract, "localSymbol", str(contract))
+        has_oi = not math.isnan(ticker.putOpenInterest)
+
+        logger.debug(
+            "{symbol}: timing — price {price:.1f}s, greeks {greeks:.1f}s, "
+            "oi {oi:.1f}s (total {total:.1f}s) | "
+            "has_price={has_price} has_oi={has_oi}",
+            symbol=symbol,
+            price=t1 - t0,
+            greeks=t2 - t1,
+            oi=t3 - t2,
+            total=t3 - t0,
+            has_price=_has_any_price(ticker),
+            has_oi=has_oi,
+        )
 
         if not _has_any_price(ticker):
             logger.debug(
