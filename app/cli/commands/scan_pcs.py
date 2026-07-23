@@ -160,9 +160,35 @@ async def _scan_pcs(
 
         console.print()
         console.rule("[bold]Results[/]")
-        console.print()
 
         if all_passing:
+            # Group passing candidates by ticker and show context per ticker
+            from app.cli.shared import print_market_context
+            from app.iv_history.repository import IVHistoryRepository
+
+            settings_ctx = Settings()
+            repo = IVHistoryRepository(settings_ctx.iv_history_db_path)
+            iv_summaries = repo.summary_by_ticker()
+            iv_min_days = settings_ctx.get(
+                "cash_secured_put", "ivr"
+            )["minimum_days_history"]
+
+            seen_tickers: set[str] = set()
+            for t, c in all_passing:
+                if t not in seen_tickers:
+                    seen_tickers.add(t)
+                    iv_entry = next(
+                        (s for s in iv_summaries if s["ticker"] == t), None
+                    )
+                    print_market_context(
+                        ticker=t,
+                        underlying_price=c.short.underlying_price,
+                        current_iv=c.short.implied_volatility,
+                        iv_days=iv_entry["days"] if iv_entry else 0,
+                        iv_min_days=iv_min_days,
+                    )
+
+            console.print()
             _render_results_table(
                 all_passing,
                 title=f"✅ PCS {sleeve_label} — Passing Candidates",

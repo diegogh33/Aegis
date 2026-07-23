@@ -2,11 +2,68 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
+from decimal import Decimal
 
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
 
 console = Console()
+
+
+def print_market_context(
+    ticker: str,
+    underlying_price: Decimal | None,
+    current_iv: Decimal | None,
+    iv_days: int,
+    iv_min_days: int = 90,
+) -> None:
+    """
+    Prints a context panel above the PCS top candidates table with:
+    - Current price of the underlying
+    - Current IV (latest snapshot)
+    - IVR status (days accumulated / 90 needed)
+    - Direct link to earnings calendar
+    """
+
+    lines = []
+
+    if underlying_price is not None:
+        lines.append(f"[bold]Precio actual:[/]   ${float(underlying_price):.2f}")
+    else:
+        lines.append("[bold]Precio actual:[/]   —")
+
+    if current_iv is not None:
+        lines.append(
+            f"[bold]IV actual:[/]       {float(current_iv):.1%}"
+        )
+    else:
+        lines.append("[bold]IV actual:[/]       —")
+
+    if iv_days >= iv_min_days:
+        ivr_str = f"[green]✓ Activo ({iv_days} días)[/]"
+    else:
+        remaining = iv_min_days - iv_days
+        ivr_str = (
+            f"[yellow]Acumulando — {iv_days}/{iv_min_days} días "
+            f"({remaining} restantes)[/]"
+        )
+    lines.append(f"[bold]IVR:[/]             {ivr_str}")
+
+    earnings_url = f"https://finance.yahoo.com/quote/{ticker}/"
+    lines.append(
+        f"[bold]Próx. earnings:[/]  "
+        f"[link={earnings_url}]Consultar en Yahoo Finance →[/link]"
+    )
+
+    panel = Panel(
+        "\n".join(lines),
+        title=f"[bold cyan]Contexto — {ticker}[/]",
+        border_style="cyan",
+        padding=(0, 2),
+    )
+    console.print()
+    console.print(panel)
 
 
 @dataclass

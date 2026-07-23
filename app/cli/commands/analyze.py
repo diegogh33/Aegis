@@ -425,6 +425,9 @@ async def _single(
 
 def _render_pcs_table(result, ticker: str) -> None:
     """Renders the PCS candidates table below the main candidates table."""
+    from app.cli.shared import print_market_context
+    from app.config.settings import Settings
+    from app.iv_history.repository import IVHistoryRepository
     from app.strategies.pcs import PCS_MIN_OI, _mid, find_pcs_candidates
 
     all_contracts = (
@@ -450,6 +453,28 @@ def _render_pcs_table(result, ticker: str) -> None:
             "and available bid/ask data.[/]"
         )
         return
+
+    # ── Market context panel ───────────────────────────────────────────
+    # Get price and IV from the best contract we have
+    sample = all_contracts[0]
+    underlying_price = sample.underlying_price
+    current_iv = sample.implied_volatility
+
+    # IVR progress from local history
+    settings = Settings()
+    repo = IVHistoryRepository(settings.iv_history_db_path)
+    summaries = repo.summary_by_ticker()
+    iv_entry = next((s for s in summaries if s["ticker"] == ticker), None)
+    iv_days = iv_entry["days"] if iv_entry else 0
+    iv_min_days = settings.get("cash_secured_put", "ivr")["minimum_days_history"]
+
+    print_market_context(
+        ticker=ticker,
+        underlying_price=underlying_price,
+        current_iv=current_iv,
+        iv_days=iv_days,
+        iv_min_days=iv_min_days,
+    )
 
     passing = [c for c in candidates if c.passes_all]
 
