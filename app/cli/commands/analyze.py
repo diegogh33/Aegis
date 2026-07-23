@@ -166,12 +166,20 @@ async def _no_rules(
             return
 
     # DTE window for the scan:
-    # - --until specified: always use wide window (1-730 days) and
-    #   let --until handle the cutoff — no need for --long-term
-    # - --long-term without --until: 90-730 days (long-term scan)
-    # - neither: 1-730 days (show everything up to 2 years)
+    # - --until specified: scan from 1 day up to until_date (in days)
+    # - --long-term without --until: 90-730 days
+    # - neither: 1-730 days
+    from datetime import date as date_today_type
+    today = date_today_type.today()
+
     if until_date is not None:
-        dte_window = {"min": 1, "max": 730}
+        max_dte = (until_date - today).days
+        if max_dte <= 0:
+            console.print(
+                f"[red]--until {until} is in the past.[/]"
+            )
+            return
+        dte_window = {"min": 1, "max": max_dte}
     elif long_term:
         dte_window = {"min": 90, "max": 730}
     else:
@@ -195,14 +203,16 @@ async def _no_rules(
         target_delta=target_delta,
     )
 
-    # Filter: only contracts with valid delta in [min_delta, 0]
-    # and within the --until cutoff
+    # Show contracts with delta between -0.50 (ATM side) and -0.10 (OTM
+    # limit). This is the interesting range for selling options - deeper
+    # OTM than -0.10 has very little premium, more ITM than -0.50 is
+    # too risky.
     filtered = [
         c for c in contracts
         if c.delta is not None
-        and min_delta <= c.delta <= 0
-        and (until_date is None or c.expiration <= until_date)
+        and -0.50 <= c.delta <= -0.10
         and c.bid is not None
+        and c.bid > 0
     ]
 
     if not filtered:
@@ -211,24 +221,24 @@ async def _no_rules(
         )
         return
 
-    # Sort by expiration then strike descending (ATM → OTM)
-    filtered.sort(key=lambda c: (c.expiration, -c.strike))
+    # Sort by bid descending — highest premium first
+    filtered.sort(key=lambda c: c.bid or 0, reverse=True)
 
     table = Table(
         title=f"Raw PUT Chain — {ticker}"
               + (f" (until {until})" if until else "")
-              + f" | delta ≥ {min_delta}"
+              + " | delta -0.50 to -0.10 | sorted by premium"
     )
 
-    table.add_column("Expiration")
-    table.add_column("Strike", justify="right", style="bold")
-    table.add_column("Bid", justify="right")
+    table.add_column("Bid", justify="right", style="bold")
     table.add_column("Ask", justify="right")
     table.add_column("Mid", justify="right")
+    table.add_column("Strike", justify="right")
     table.add_column("Delta", justify="right")
     table.add_column("IV", justify="right")
-    table.add_column("Open Int", justify="right")
     table.add_column("OTM%", justify="right")
+    table.add_column("Open Int", justify="right")
+    table.add_column("Expiration")
 
     for c in filtered:
         mid = (c.bid + c.ask) / 2 if c.bid and c.ask else None
@@ -245,21 +255,21 @@ async def _no_rules(
             otm_str = "-"
 
         table.add_row(
-            str(c.expiration),
-            f"${c.strike}",
             f"${float(c.bid):.2f}" if c.bid else "-",
             f"${float(c.ask):.2f}" if c.ask else "-",
             mid_str,
+            f"${c.strike}",
             f"{c.delta:.3f}" if c.delta else "-",
             f"{float(c.implied_volatility):.2%}" if c.implied_volatility else "-",
-            str(c.open_interest) if c.open_interest else "-",
             otm_str,
+            str(c.open_interest) if c.open_interest else "-",
+            str(c.expiration),
         )
 
     console.print(table)
     console.print(
         f"\n[dim]{len(filtered)} contracts shown "
-        f"(delta {min_delta} to 0.00).[/]"
+        f"(delta -0.50 to -0.10, sorted by premium desc).[/]"
     )
 
 
