@@ -165,13 +165,19 @@ async def _no_rules(
             )
             return
 
-    # Use wide DTE window to get all available expirations
-    if long_term:
+    # DTE window for the scan:
+    # - --until specified: always use wide window (1-730 days) and
+    #   let --until handle the cutoff — no need for --long-term
+    # - --long-term without --until: 90-730 days (long-term scan)
+    # - neither: 1-730 days (show everything up to 2 years)
+    if until_date is not None:
+        dte_window = {"min": 1, "max": 730}
+    elif long_term:
         dte_window = {"min": 90, "max": 730}
-        target_delta = -0.20
     else:
         dte_window = {"min": 1, "max": 730}
-        target_delta = -0.20
+
+    target_delta = -0.20
 
     scanner = OptionScanner(ibkr)
 
