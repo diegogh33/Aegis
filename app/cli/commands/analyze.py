@@ -286,6 +286,12 @@ async def _single(
         ticker, exchange=exchange, currency=currency, long_term=long_term
     )
 
+    # When --pcs is active, skip the candidates and rejected tables —
+    # the user only wants the market context and PCS candidates.
+    if pcs:
+        _render_pcs_table(result, ticker)
+        return
+
     company = result.company
     thesis = result.thesis
 
@@ -466,7 +472,10 @@ def _render_pcs_table(result, ticker: str) -> None:
     summaries = repo.summary_by_ticker()
     iv_entry = next((s for s in summaries if s["ticker"] == ticker), None)
     iv_days = iv_entry["days"] if iv_entry else 0
-    iv_min_days = settings.get("cash_secured_put", "ivr")["minimum_days_history"]
+    ivr_config = settings.get("cash_secured_put", "ivr")
+    iv_min_days = ivr_config["minimum_days_history"]
+    iv_minimum = ivr_config["minimum"] / 100
+    iv_preferred = ivr_config["preferred_minimum"] / 100
 
     print_market_context(
         ticker=ticker,
@@ -474,6 +483,8 @@ def _render_pcs_table(result, ticker: str) -> None:
         current_iv=current_iv,
         iv_days=iv_days,
         iv_min_days=iv_min_days,
+        iv_minimum=iv_minimum,
+        iv_preferred=iv_preferred,
     )
 
     passing = [c for c in candidates if c.passes_all]

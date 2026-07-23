@@ -17,11 +17,13 @@ def print_market_context(
     current_iv: Decimal | None,
     iv_days: int,
     iv_min_days: int = 90,
+    iv_minimum: float = 0.30,
+    iv_preferred: float = 0.40,
 ) -> None:
     """
     Prints a context panel above the PCS top candidates table with:
     - Current price of the underlying
-    - Current IV (latest snapshot)
+    - Current IV with color coding vs constitution thresholds
     - IVR status (days accumulated / 90 needed)
     - Direct link to earnings calendar
     """
@@ -34,9 +36,22 @@ def print_market_context(
         lines.append("[bold]Precio actual:[/]   —")
 
     if current_iv is not None:
-        lines.append(
-            f"[bold]IV actual:[/]       {float(current_iv):.1%}"
-        )
+        iv_float = float(current_iv)
+        if iv_float >= iv_preferred:
+            iv_str = (
+                f"[green]{iv_float:.1%} ✓ Buena[/]"
+            )
+        elif iv_float >= iv_minimum:
+            iv_str = (
+                f"[yellow]{iv_float:.1%} ⚠ Aceptable "
+                f"(mín. {iv_minimum:.0%}, pref. {iv_preferred:.0%})[/]"
+            )
+        else:
+            iv_str = (
+                f"[bold red]{iv_float:.1%} ✗ Por debajo del mínimo "
+                f"({iv_minimum:.0%})[/]"
+            )
+        lines.append(f"[bold]IV actual:[/]       {iv_str}")
     else:
         lines.append("[bold]IV actual:[/]       —")
 
