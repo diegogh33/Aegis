@@ -27,6 +27,18 @@ def analyze(
     currency: str = "USD",
     long_term: bool = False,
     pcs: bool = False,
+    no_rules: bool = typer.Option(
+        False,
+        "--no-rules",
+        help="Show raw option chain without applying any Constitution rules. "
+             "Displays all contracts from ATM down to delta -0.10.",
+    ),
+    until: str | None = typer.Option(
+        None,
+        "--until",
+        help="Limit expirations to this month (YYYY-MM format). "
+             "E.g. --until 2026-11 shows only contracts expiring by Nov 2026.",
+    ),
 ) -> None:
     """
     Analyzes one or more tickers for Cash Secured PUT candidates.
@@ -40,9 +52,11 @@ def analyze(
     --long-term switches to the opportunistic long-dated PUT strategy
     (90-365 DTE). --currency EUR for European underlyings.
 
-    --pcs additionally shows Put Credit Spread combinations between
-    the scanned contracts, evaluating credit/width ratio (≥25% to pass
-    per Plan Operativo S2/S3) and OI on both legs (≥500 each).
+    --pcs additionally shows Put Credit Spread combinations.
+
+    --no-rules shows the raw option chain without any Constitution
+    filters (delta, spread, liquidity...). Use --until YYYY-MM to
+    limit the expirations shown.
     """
     asyncio.run(
         _analyze(
@@ -51,6 +65,8 @@ def analyze(
             currency=currency,
             long_term=long_term,
             pcs=pcs,
+            no_rules=no_rules,
+            until=until,
         )
     )
 
@@ -61,6 +77,8 @@ async def _analyze(
     currency: str,
     long_term: bool,
     pcs: bool = False,
+    no_rules: bool = False,
+    until: str | None = None,
 ) -> None:
 
     alpha = AlphaVantageProvider()
@@ -71,7 +89,9 @@ async def _analyze(
 
         console.rule("[bold blue]Aegis[/]")
 
-        if long_term:
+        if no_rules:
+            console.print("[bold]Mode: raw chain — no Constitution rules[/]")
+        elif long_term:
             console.print(
                 "[bold]Mode: long-term opportunistic (90-365 DTE)[/]"
             )
@@ -86,7 +106,17 @@ async def _analyze(
             atlas_provider=atlas,
         )
 
-        if len(tickers) == 1:
+        if no_rules:
+            if len(tickers) == 1:
+                await _no_rules(
+                    tickers[0], exchange, currency, long_term,
+                    ibkr, until=until,
+                )
+            else:
+                console.print(
+                    "[yellow]--no-rules only supports a single ticker.[/]"
+                )
+        elif len(tickers) == 1:
             await _single(
                 tickers[0], exchange, currency, long_term, service, pcs=pcs
             )
@@ -100,6 +130,131 @@ async def _analyze(
         await alpha.close()
         await ibkr.disconnect()
         await atlas.close()
+
+
+async def _no_rules(
+    ticker: str,
+    exchange: str,
+    currency: str,
+    long_term: bool,
+    ibkr: IBKRProvider,
+    until: str | None = None,
+    min_delta: float = -0.10,
+) -> None:
+    """
+    Shows the raw option chain without any Constitution rules.
+    Contracts from ATM down to min_delta (-0.10 by default),
+    optionally filtered to expirations up to a given YYYY-MM.
+    """
+    from datetime import date as date_type
+
+    from app.services.option_scanner import OptionScanner
+
+    # Parse --until into a cutoff date (last day of that month)
+    until_date: date_type | None = None
+    if until:
+        try:
+            year, month = until.split("-")
+            import calendar
+            last_day = calendar.monthrange(int(year), int(month))[1]
+            until_date = date_type(int(year), int(month), last_day)
+        except ValueError:
+            console.print(
+                f"[red]Invalid --until format '{until}'. "
+                f"Use YYYY-MM (e.g. 2026-11).[/]"
+            )
+            return
+
+    # Use wide DTE window to get all available expirations
+    if long_term:
+        dte_window = {"min": 90, "max": 730}
+        target_delta = -0.20
+    else:
+        dte_window = {"min": 1, "max": 730}
+        target_delta = -0.20
+
+    scanner = OptionScanner(ibkr)
+
+    console.print(
+        f"\nFetching raw chain for [bold]{ticker}[/]"
+        + (f" until {until}" if until else "")
+        + "...\n"
+    )
+
+    contracts = await scanner.scan_puts(
+        ticker,
+        exchange=exchange,
+        currency=currency,
+        dte_window=dte_window,
+        target_delta=target_delta,
+    )
+
+    # Filter: only contracts with valid delta in [min_delta, 0]
+    # and within the --until cutoff
+    filtered = [
+        c for c in contracts
+        if c.delta is not None
+        and min_delta <= c.delta <= 0
+        and (until_date is None or c.expiration <= until_date)
+        and c.bid is not None
+    ]
+
+    if not filtered:
+        console.print(
+            "[yellow]No contracts found with available data in this range.[/]"
+        )
+        return
+
+    # Sort by expiration then strike descending (ATM → OTM)
+    filtered.sort(key=lambda c: (c.expiration, -c.strike))
+
+    table = Table(
+        title=f"Raw PUT Chain — {ticker}"
+              + (f" (until {until})" if until else "")
+              + f" | delta ≥ {min_delta}"
+    )
+
+    table.add_column("Expiration")
+    table.add_column("Strike", justify="right", style="bold")
+    table.add_column("Bid", justify="right")
+    table.add_column("Ask", justify="right")
+    table.add_column("Mid", justify="right")
+    table.add_column("Delta", justify="right")
+    table.add_column("IV", justify="right")
+    table.add_column("Open Int", justify="right")
+    table.add_column("OTM%", justify="right")
+
+    for c in filtered:
+        mid = (c.bid + c.ask) / 2 if c.bid and c.ask else None
+        mid_str = f"${float(mid):.2f}" if mid else "-"
+
+        if c.underlying_price and c.underlying_price > 0:
+            otm_pct = (c.underlying_price - c.strike) / c.underlying_price * 100
+            otm_str = (
+                f"{otm_pct:.1f}% OTM"
+                if otm_pct >= 0
+                else f"{abs(otm_pct):.1f}% ITM"
+            )
+        else:
+            otm_str = "-"
+
+        table.add_row(
+            str(c.expiration),
+            f"${c.strike}",
+            f"${float(c.bid):.2f}" if c.bid else "-",
+            f"${float(c.ask):.2f}" if c.ask else "-",
+            mid_str,
+            f"{c.delta:.3f}" if c.delta else "-",
+            f"{float(c.implied_volatility):.2%}" if c.implied_volatility else "-",
+            str(c.open_interest) if c.open_interest else "-",
+            otm_str,
+        )
+
+    console.print(table)
+    console.print(
+        f"\n[dim]{len(filtered)} contracts shown "
+        f"(delta {min_delta} to 0.00).[/]"
+    )
 
 
 async def _single(

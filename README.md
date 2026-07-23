@@ -672,6 +672,11 @@ uv run python -m app.main MU --pcs
 uv run python -m app.main ORCL --pcs
 uv run python -m app.main AMD --long-term --pcs
 
+# Cadena en crudo sin reglas (exploración libre, delta ≥ -0.10)
+uv run python -m app.main NESN --currency CHF --no-rules
+uv run python -m app.main NESN --currency CHF --no-rules --until 2026-11
+uv run python -m app.main NESN --currency CHF --long-term --no-rules --until 2027-06
+
 # Mercado europeo
 uv run python -m app.main ASML --currency EUR
 uv run python -m app.main ASML --currency EUR --long-term
