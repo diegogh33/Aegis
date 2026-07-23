@@ -667,6 +667,11 @@ uv run python -m app.main AAPL
 # Largo plazo (90-365 DTE, delta -0.10/-0.30) — tabla detallada
 uv run python -m app.main ACN --long-term
 
+# Con análisis de spreads PCS (crédito/ancho ≥25%, OI ≥500 ambas patas)
+uv run python -m app.main MU --pcs
+uv run python -m app.main ORCL --pcs
+uv run python -m app.main AMD --long-term --pcs
+
 # Mercado europeo
 uv run python -m app.main ASML --currency EUR
 uv run python -m app.main ASML --currency EUR --long-term
@@ -703,14 +708,15 @@ uv run python -m app.main watchlist --currency EUR --long-term
 ### Put Credit Spread (PCS)
 
 ``` powershell
-# Análisis individual con tabla de spreads PCS debajo de los candidatos
+# Análisis individual con tabla PCS debajo de los candidatos.
+# Muestra top 3 destacados + tabla completa con Δ Short y Caída %.
+uv run python -m app.main MU --pcs
 uv run python -m app.main ORCL --pcs
-uv run python -m app.main AMD --pcs
 
-# Scan automático del universo S2 (sistemático)
+# Scan automático del universo S2 (sistemático: AMD, MU, PYPL, COIN...)
 uv run python -m app.main scan-pcs s2
 
-# Scan automático del universo S3 (ETFs tácticos)
+# Scan automático del universo S3 (ETFs tácticos: SPY, QQQ, IWM...)
 uv run python -m app.main scan-pcs s3
 
 # Combinable con largo plazo
@@ -718,27 +724,42 @@ uv run python -m app.main scan-pcs s2 --long-term
 ```
 
 Los universos S2 y S3 se configuran en `constitution.yaml`
-(`s2_universe` / `s3_universe`). Los filtros de PCS son:
-crédito/ancho ≥ 25% y OI ≥ 500 en ambas patas.
+(`s2_universe` / `s3_universe`). Para añadir o quitar tickers, edita
+esa sección directamente.
+
+**Filtros PCS** (Plan Operativo S2/S3):
+- Crédito neto / ancho del spread **≥ 25%**
+- Open Interest **≥ 500 contratos en ambas patas** (short y long)
+- Ordenados por crédito/ancho desc — los top 3 que pasan aparecen en
+  una tabla destacada encima del listado completo.
 
 ### IV History
 
 ``` powershell
-# Ver progreso de acumulación de histórico IV por ticker
+# Ver progreso de acumulación de histórico IV por ticker.
+# No hay que ejecutarlo regularmente — solo para consultar.
+# El histórico se guarda automáticamente con cualquier análisis.
 uv run python -m app.main iv-history
 ```
 
-### Notas
+`IVRankRule` se activa por ticker cuando acumula ≥ 90 días de
+snapshots diarios. Los snapshots se guardan solos con cada análisis
+— uno por día por ticker, sin necesitar ningún comando aparte.
+
+### Notas generales
 
 - `--long-term` siempre se añade al final del comando.
 - `--currency EUR` para cualquier ticker que cotice en Europa.
+- `--pcs` es compatible con `--long-term` y `--currency EUR`.
 - Para tickers explícitos, el watchlist **no** aplica el filtro de
   precio — los analiza siempre.
 - El watchlist automático **sí** aplica el filtro: salta tickers cuyo
   precio actual supera el `entrada_max` de ATLAS en más de un 10%.
-- Los datos de Open Interest solo llegan con el mercado US abierto
-  (15:30-22:00 hora Madrid). Fuera de ese horario, la columna
-  mostrará `-` en algunos strikes.
+- Tickers excluidos del watchlist automático se configuran en
+  `constitution.yaml` (`watchlist.exclude`): actualmente KRKNF,
+  MC.PA, WKL, LOG.MC, PG, DEO, MAIN.
+- Open Interest solo llega con el mercado US abierto (15:30-22:00
+  Madrid). Fuera de ese horario, algunos strikes mostrarán `-`.
 
 ------------------------------------------------------------------------
 
@@ -860,33 +881,23 @@ para continuar sin que tengas que re-explicar nada.
 
 ## Pendientes al cierre de la última sesión (22-jul-2026)
 
--   Probar `watchlist` completo con mercado US abierto para confirmar
-    que la tabla resumen muestra Bid/Ask/Delta/IV/Open Int con datos
-    reales — las columnas ya están implementadas pero solo se ha
-    validado con mercado cerrado.
 -   **Recordar siempre probar con mercado US abierto (15:30-22:00
     Madrid) antes de dar algo por resuelto** — Diego lo pidió
     explícitamente y sigue vigente.
+-   IVRankRule acumulando histórico — 90 días por ticker para que
+    empiece a filtrar de verdad. No hay nada que hacer, se acumula
+    solo con el uso normal.
 
-### Resuelto en la sesión del 22-jul
+### Todo validado con mercado abierto el 22-jul
 
--   ✅ Open Interest llegando correctamente — era `ticker.openInterest`
-    (campo genérico) en vez de `ticker.putOpenInterest` (campo
-    correcto para contratos PUT individuales). Confirmado con AAPL con
-    mercado abierto: todos los candidatos muestran Open Int real.
--   ✅ `--long-term` validado con datos reales (DHR, NFLX, ASML).
--   ✅ `watchlist` automático funcionando: filtro de precio (>10% sobre
-    `entrada_max`), lista de exclusión configurable en
-    `constitution.yaml` (sección `watchlist.exclude`), errores
-    excluidos de la tabla resumen.
--   ✅ Tabla resumen con columnas completas: Score, Strike, OTM%, Bid,
-    Ask, Delta, IV, Open Int, Expiration, ordenada por Score.
--   ✅ Múltiples tickers explícitos: `app.main NFLX UBER --long-term`
-    muestra tabla resumen; un solo ticker sigue mostrando tabla
-    detallada completa.
--   ✅ Mensajes `tickSize: Unknown` y `tickOptionComputation: Unknown`
-    de `ib_async` suprimidos.
--   ✅ `tradingClass` fijado explícitamente — corrige cadenas
-    contaminadas por clases secundarias (confirmado con MSFT: `2MSFT`).
--   ✅ `underlying_price` del stock preferido sobre el del contrato de
-    opción — corrige OTM% disparado en ASML/EUREX (~83€ vs ~1576€ real).
+-   ✅ Timing por contrato: price 2.0s, greeks 0.0s, OI 0.0s en la
+    mayoría. Solo strikes muy poco líquidos tardan hasta 4s en OI.
+-   ✅ Open Interest llegando correctamente — `putOpenInterest` es el
+    campo correcto para PUT individuales (no `openInterest`).
+-   ✅ Multi-ticker tabla resumen con Bid/Ask/Delta/IV/Open Int reales.
+-   ✅ `--pcs` funcionando: top 3 destacados, columnas Caída % y Δ
+    Short. Confirmado con MU: $810/$800 y $820/$800 identificados
+    correctamente como candidatos principales.
+-   ✅ `scan-pcs s2` recorre el universo S2 y presenta candidatos PCS.
+-   ✅ `watchlist --long-term` con filtro de precio y lista de exclusión.
+-   ✅ `iv-history` mostrando 32 tickers acumulando desde 21-22 jul.
