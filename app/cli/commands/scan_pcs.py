@@ -125,7 +125,10 @@ async def _scan_pcs(
                     [s.option for s in result.contracts]
                     + [r.option for r in result.rejected]
                 )
-                candidates = find_pcs_candidates(contracts)
+                candidates = find_pcs_candidates(
+                    contracts,
+                    buy_price=result.thesis.buy_price,
+                )
 
                 passing = [c for c in candidates if c.passes_all]
                 watch = [

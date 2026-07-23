@@ -268,7 +268,10 @@ def _render_pcs_table(result, ticker: str) -> None:
         )
         return
 
-    candidates = find_pcs_candidates(all_contracts)
+    candidates = find_pcs_candidates(
+        all_contracts,
+        buy_price=result.thesis.buy_price,
+    )
 
     if not candidates:
         console.print(
@@ -314,6 +317,8 @@ def _render_pcs_table(result, ticker: str) -> None:
 
         if c.passes_all:
             status = "[bold green]✅ PASA[/]"
+        elif not c.passes_buy_zone:
+            status = "[red]❌ Zona compra[/]"
         elif c.passes_credit_ratio and not c.oi_ok:
             status = "[yellow]⚠ OI bajo[/]"
         elif not c.passes_credit_ratio and c.oi_ok:

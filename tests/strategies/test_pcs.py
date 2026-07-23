@@ -102,3 +102,77 @@ def test_passing_spreads_sorted_before_failing():
 
 def test_pcs_min_oi_constant_is_500():
     assert PCS_MIN_OI == 500
+
+
+def test_short_strike_above_buy_price_fails_buy_zone():
+    """
+    Regression: if the short strike is above the ATLAS buy-zone ceiling,
+    being assigned would mean buying shares at a price above what Diego
+    considers attractive - the spread should not pass even if
+    credit/width and OI are fine.
+    """
+    short = _contract(strike=120, bid=6.10, ask=7.00)
+    long = _contract(strike=110, bid=3.20, ask=3.70)
+
+    # buy_price=115: short strike 120 > 115 → fails buy zone
+    candidates = find_pcs_candidates(
+        [short, long],
+        buy_price=Decimal("115"),
+    )
+
+    assert len(candidates) == 1
+    c = candidates[0]
+    assert not c.passes_buy_zone
+    assert not c.passes_all
+
+
+def test_short_strike_at_buy_price_passes_buy_zone():
+    short = _contract(strike=110, bid=3.20, ask=3.70)
+    long = _contract(strike=100, bid=1.37, ask=1.77)
+
+    candidates = find_pcs_candidates(
+        [short, long],
+        buy_price=Decimal("110"),
+    )
+
+    assert candidates[0].passes_buy_zone
+
+
+def test_no_buy_price_always_passes_buy_zone():
+    """No ATLAS entry → no buy-zone check → same behavior as before."""
+    short = _contract(strike=500, bid=6.10, ask=7.00)
+    long = _contract(strike=480, bid=3.20, ask=3.70)
+
+    candidates = find_pcs_candidates([short, long], buy_price=None)
+
+    assert candidates[0].passes_buy_zone
+
+
+def test_buy_zone_failure_shown_before_other_failures_in_sort():
+    """
+    A spread that passes all filters (including buy_zone) should appear
+    before one that only fails buy_zone.
+    """
+    # Passes all: credit ratio 66.3%, short 110 <= buy_price 115
+    passing_short = _contract(strike=110, bid=8.00, ask=8.40)
+    passing_long = _contract(strike=100, bid=1.37, ask=1.77)
+
+    # Fails buy_zone only: short 120 > buy_price 115
+    zone_short = _contract(strike=120, bid=6.10, ask=7.00)
+    zone_long2 = _contract(strike=100, bid=1.37, ask=1.77)
+
+    candidates = find_pcs_candidates(
+        [passing_short, passing_long, zone_short, zone_long2],
+        buy_price=Decimal("115"),
+    )
+
+    passing = [c for c in candidates if c.passes_all]
+    assert len(passing) >= 1
+
+    first_passing_idx = next(
+        i for i, c in enumerate(candidates) if c.passes_all
+    )
+    first_failing_idx = next(
+        i for i, c in enumerate(candidates) if not c.passes_all
+    )
+    assert first_passing_idx < first_failing_idx

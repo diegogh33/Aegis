@@ -31,6 +31,10 @@ class PCSCandidate:
     credit_ratio: Decimal      # credit_mid / width
     break_even: Decimal        # short.strike - credit_mid
 
+    # Optional: ATLAS buy-zone ceiling for the underlying.
+    # When set, short strikes above this value fail passes_buy_zone.
+    buy_price: Decimal | None = None
+
     @property
     def passes_credit_ratio(self) -> bool:
         return self.credit_ratio >= PCS_MIN_CREDIT_RATIO
@@ -50,8 +54,25 @@ class PCSCandidate:
         return self.short_oi_ok and self.long_oi_ok
 
     @property
+    def passes_buy_zone(self) -> bool:
+        """
+        True when the short strike is at or below the ATLAS buy-zone
+        ceiling (buy_price). If no buy_price is set (ticker not in
+        ATLAS or no entrada_max recorded), this is always True -
+        consistent with BelowBuyZoneRule's non-blocking behavior for
+        tickers without a formal ATLAS thesis.
+        """
+        if self.buy_price is None:
+            return True
+        return self.short.strike <= self.buy_price
+
+    @property
     def passes_all(self) -> bool:
-        return self.passes_credit_ratio and self.oi_ok
+        return (
+            self.passes_credit_ratio
+            and self.oi_ok
+            and self.passes_buy_zone
+        )
 
 
 def _mid(contract: OptionContract) -> Decimal | None:
@@ -63,6 +84,7 @@ def _mid(contract: OptionContract) -> Decimal | None:
 
 def find_pcs_candidates(
     contracts: list[OptionContract],
+    buy_price: Decimal | None = None,
 ) -> list[PCSCandidate]:
     """
     Generates all valid PCS combinations from a list of option contracts.
@@ -74,6 +96,13 @@ def find_pcs_candidates(
     - Credit must be positive (long mid < short mid).
     - Results are sorted: passing spreads first (by credit_ratio desc),
       then non-passing (by credit_ratio desc).
+
+    buy_price: optional ATLAS buy-zone ceiling (InvestmentThesis.
+    buy_price). When set, spreads whose short strike exceeds this value
+    are generated but marked as failing passes_buy_zone - the sort
+    order keeps them below passing candidates. When None (ticker not
+    in ATLAS or no entrada_max recorded), no buy-zone check is applied,
+    consistent with BelowBuyZoneRule's non-blocking behavior.
     """
 
     # Group contracts by expiration
@@ -125,6 +154,7 @@ def find_pcs_candidates(
                     credit_mid=credit,
                     credit_ratio=ratio,
                     break_even=short.strike - credit,
+                    buy_price=buy_price,
                 )
 
                 candidates.append(candidate)
