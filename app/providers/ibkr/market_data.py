@@ -214,7 +214,7 @@ class MarketDataProvider:
 
         if _has_any_price(ticker) and math.isnan(ticker.putOpenInterest):
 
-            for _ in range(8):
+            for _ in range(20):
 
                 await asyncio.sleep(0.5)
 
