@@ -234,6 +234,7 @@ def _render_results_table(
     table.add_column("Short", justify="right")
     table.add_column("Long", justify="right")
     table.add_column("Exp")
+    table.add_column("DTE", justify="right")
     table.add_column("Ancho", justify="right")
     table.add_column("Mid Short", justify="right")
     table.add_column("Mid Long", justify="right")
@@ -281,11 +282,15 @@ def _render_results_table(
         else:
             drop_str = "-"
 
+        from datetime import date as date_type
+        dte = (c.short.expiration - date_type.today()).days
+
         table.add_row(
             ticker,
             f"${c.short.strike}",
             f"${c.long.strike}",
             str(c.short.expiration),
+            str(dte),
             f"${c.width:.0f}",
             f"${float(mid_short):.2f}",
             f"${float(mid_long):.2f}",

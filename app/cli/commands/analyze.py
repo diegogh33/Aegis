@@ -229,11 +229,12 @@ async def _no_rules(
               + (f" (until {until})" if until else "")
               + " | delta -0.50 to -0.10 | sorted by premium"
     )
-
     table.add_column("Bid", justify="right", style="bold")
     table.add_column("Ask", justify="right")
     table.add_column("Mid", justify="right")
     table.add_column("Strike", justify="right")
+    table.add_column("DTE", justify="right")
+    table.add_column("Ret. Anual.", justify="right")
     table.add_column("Delta", justify="right")
     table.add_column("IV", justify="right")
     table.add_column("OTM%", justify="right")
@@ -243,6 +244,17 @@ async def _no_rules(
     for c in filtered:
         mid = (c.bid + c.ask) / 2 if c.bid and c.ask else None
         mid_str = f"${float(mid):.2f}" if mid else "-"
+
+        from datetime import date as date_type
+        dte = (c.expiration - date_type.today()).days
+        dte_str = str(dte)
+
+        # Annualized return = (bid / strike) * (365 / DTE) * 100
+        if c.bid and c.strike > 0 and dte > 0:
+            ann_return = float(c.bid) / float(c.strike) * (365 / dte) * 100
+            ann_str = f"{ann_return:.1f}%"
+        else:
+            ann_str = "-"
 
         if c.underlying_price and c.underlying_price > 0:
             otm_pct = (c.underlying_price - c.strike) / c.underlying_price * 100
@@ -259,6 +271,8 @@ async def _no_rules(
             f"${float(c.ask):.2f}" if c.ask else "-",
             mid_str,
             f"${c.strike}",
+            dte_str,
+            ann_str,
             f"{c.delta:.3f}" if c.delta else "-",
             f"{float(c.implied_volatility):.2%}" if c.implied_volatility else "-",
             otm_str,
@@ -535,11 +549,16 @@ def _render_pcs_table(result, ticker: str) -> None:
 
         label = f"[bold cyan]#{rank}[/]" if rank else ""
 
+        from datetime import date as date_type
+        dte = (c.short.expiration - date_type.today()).days
+        dte_str = str(dte)
+
         return (
             label,
             f"${c.short.strike}",
             f"${c.long.strike}",
             str(c.short.expiration),
+            dte_str,
             f"${c.width:.0f}",
             f"${float(mid_short):.2f}",
             f"${float(mid_long):.2f}",
@@ -559,6 +578,7 @@ def _render_pcs_table(result, ticker: str) -> None:
         t.add_column("Short", justify="right", style="bold")
         t.add_column("Long", justify="right")
         t.add_column("Exp")
+        t.add_column("DTE", justify="right")
         t.add_column("Ancho", justify="right")
         t.add_column("Mid Short", justify="right")
         t.add_column("Mid Long", justify="right")
