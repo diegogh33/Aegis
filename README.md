@@ -1,5 +1,24 @@
 # AEGIS
 
+<p align="center">
+  <img src="assets/aegis.svg" width="160" alt="La Égida — escudo de Zeus y Atenea"/>
+</p>
+
+## ¿Por qué Aegis?
+
+En la mitología griega, la **Égida** era el escudo que protegía a Zeus
+y Atenea. Forjado por Hefesto, era indestructible — no un arma de
+ataque, sino un escudo que alejaba el peligro.
+
+Nuestro sistema no busca encontrar la operación con mayor rentabilidad.
+**Busca protegerme de cometer errores.**
+
+Cada regla de la Constitution, cada filtro de delta, cada validación de
+spread o de earnings, existe por la misma razón que la Égida: no para
+ganar más, sino para no perder por descuido.
+
+---
+
 ## Visión del proyecto
 
 Aegis no pretende ser un simple escáner de opciones.

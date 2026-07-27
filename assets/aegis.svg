@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 220" width="200" height="220">
+  <!-- Shield body -->
+  <path d="M100 10 L185 50 L185 120 Q185 180 100 210 Q15 180 15 120 L15 50 Z"
+        fill="#1a1a2e" stroke="#c9a84c" stroke-width="4"/>
+  <!-- Inner shield border -->
+  <path d="M100 25 L170 60 L170 118 Q170 168 100 195 Q30 168 30 118 L30 60 Z"
+        fill="none" stroke="#c9a84c" stroke-width="2" opacity="0.6"/>
+  <!-- Greek key pattern hint (simplified) -->
+  <path d="M55 75 L55 65 L80 65 L80 75" fill="none" stroke="#c9a84c" stroke-width="1.5" opacity="0.5"/>
+  <path d="M120 75 L120 65 L145 65 L145 75" fill="none" stroke="#c9a84c" stroke-width="1.5" opacity="0.5"/>
+  <!-- Gorgon/Medusa face (simplified) -->
+  <circle cx="100" cy="115" r="35" fill="#0d1b2a" stroke="#c9a84c" stroke-width="2"/>
+  <!-- Eyes -->
+  <ellipse cx="89" cy="110" rx="6" ry="7" fill="#c9a84c" opacity="0.9"/>
+  <ellipse cx="111" cy="110" rx="6" ry="7" fill="#c9a84c" opacity="0.9"/>
+  <circle cx="89" cy="111" r="3" fill="#1a1a2e"/>
+  <circle cx="111" cy="111" r="3" fill="#1a1a2e"/>
+  <!-- Nose -->
+  <path d="M97 115 L100 122 L103 115" fill="none" stroke="#c9a84c" stroke-width="1.5"/>
+  <!-- Mouth -->
+  <path d="M87 128 Q100 136 113 128" fill="none" stroke="#c9a84c" stroke-width="2"/>
+  <!-- Snake hair (simplified) -->
+  <path d="M70 95 Q65 80 75 72 Q80 68 85 75" fill="none" stroke="#c9a84c" stroke-width="2" opacity="0.7"/>
+  <path d="M88 85 Q85 70 95 65" fill="none" stroke="#c9a84c" stroke-width="2" opacity="0.7"/>
+  <path d="M112 85 Q115 70 105 65" fill="none" stroke="#c9a84c" stroke-width="2" opacity="0.7"/>
+  <path d="M130 95 Q135 80 125 72 Q120 68 115 75" fill="none" stroke="#c9a84c" stroke-width="2" opacity="0.7"/>
+  <!-- Tassels at bottom -->
+  <line x1="70" y1="190" x2="68" y2="205" stroke="#c9a84c" stroke-width="1.5" opacity="0.6"/>
+  <line x1="85" y1="197" x2="84" y2="210" stroke="#c9a84c" stroke-width="1.5" opacity="0.6"/>
+  <line x1="100" y1="200" x2="100" y2="213" stroke="#c9a84c" stroke-width="1.5" opacity="0.6"/>
+  <line x1="115" y1="197" x2="116" y2="210" stroke="#c9a84c" stroke-width="1.5" opacity="0.6"/>
+  <line x1="130" y1="190" x2="132" y2="205" stroke="#c9a84c" stroke-width="1.5" opacity="0.6"/>
+</svg>
