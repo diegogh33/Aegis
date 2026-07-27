@@ -224,15 +224,22 @@ async def _no_rules(
     # Sort by bid descending — highest premium first
     filtered.sort(key=lambda c: c.bid or 0, reverse=True)
 
-    table = Table(
-        title=f"Raw PUT Chain — {ticker}"
-              + (f" (until {until})" if until else "")
-              + " | delta -0.50 to -0.10 | sorted by premium"
+    # Visual separation from the DEBUG logs above
+    console.print()
+    console.rule(
+        f"[bold]Raw PUT Chain — {ticker}"
+        + (f" (until {until})" if until else "")
+        + "[/]"
     )
-    table.add_column("Bid", justify="right", style="bold")
+    console.print()
+
+    table = Table(
+        title="delta -0.50 to -0.10 | sorted by premium"
+    )
+    table.add_column("Strike", justify="right", style="bold")
+    table.add_column("Bid", justify="right")
     table.add_column("Ask", justify="right")
     table.add_column("Mid", justify="right")
-    table.add_column("Strike", justify="right")
     table.add_column("DTE", justify="right")
     table.add_column("Ret. Anual.", justify="right")
     table.add_column("Delta", justify="right")
@@ -267,10 +274,10 @@ async def _no_rules(
             otm_str = "-"
 
         table.add_row(
+            f"${c.strike}",
             f"${float(c.bid):.2f}" if c.bid else "-",
             f"${float(c.ask):.2f}" if c.ask else "-",
             mid_str,
-            f"${c.strike}",
             dte_str,
             ann_str,
             f"{c.delta:.3f}" if c.delta else "-",
