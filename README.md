@@ -667,20 +667,28 @@ uv run python -m app.main AAPL
 # Largo plazo (90-365 DTE, delta -0.10/-0.30) — tabla detallada
 uv run python -m app.main ACN --long-term
 
-# Con análisis de spreads PCS (crédito/ancho ≥25%, OI ≥500 ambas patas)
+# Con análisis de spreads PCS — contexto + top 3 + tabla completa
+# (omite la tabla de candidatos individuales y rechazos)
+uv run python -m app.main NOW --pcs
 uv run python -m app.main MU --pcs
-uv run python -m app.main ORCL --pcs
 uv run python -m app.main AMD --long-term --pcs
 
-# Cadena en crudo sin reglas (exploración libre, delta ≥ -0.10)
+# Cadena en crudo sin reglas — delta -0.50 a -0.10, ordenada por prima
+# Columnas: Bid, Ask, Mid, Strike, DTE, Ret. Anual., Delta, IV, OTM%, OI, Exp
 uv run python -m app.main NESN --currency CHF --no-rules
 uv run python -m app.main NESN --currency CHF --no-rules --until 2026-11
-uv run python -m app.main NESN --currency CHF --long-term --no-rules --until 2027-06
+uv run python -m app.main NESN --currency CHF --long-term --no-rules
 
 # Mercado europeo
 uv run python -m app.main ASML --currency EUR
 uv run python -m app.main ASML --currency EUR --long-term
 ```
+
+**`--no-rules`**: muestra la cadena completa sin aplicar ninguna regla de
+Constitution. Útil para explorar un ticker nuevo o un mercado con poca
+liquidez. Ordenada por prima (bid) descendente. `--until YYYY-MM` limita
+los vencimientos a ese mes — si se especifica, `--long-term` no es
+necesario para la ventana temporal.
 
 ### Análisis de varios tickers explícitos — tabla resumen
 
@@ -710,13 +718,18 @@ uv run python -m app.main watchlist --long-term
 uv run python -m app.main watchlist --currency EUR --long-term
 ```
 
+Tickers excluidos del watchlist automático: `watchlist.exclude` en
+`constitution.yaml` (actualmente: KRKNF, MC.PA, WKL, LOG.MC, PG, DEO,
+MAIN). Edita esa lista para añadir o quitar.
+
 ### Put Credit Spread (PCS)
 
 ``` powershell
-# Análisis individual con tabla PCS debajo de los candidatos.
-# Muestra top 3 destacados + tabla completa con Δ Short y Caída %.
+# Ticker individual: panel de contexto + top 3 PCS + tabla completa
+# Panel muestra: precio actual, IV con colores, IVR y enlace earnings
+uv run python -m app.main NOW --pcs
 uv run python -m app.main MU --pcs
-uv run python -m app.main ORCL --pcs
+uv run python -m app.main ORCL --long-term --pcs
 
 # Scan automático del universo S2 (sistemático: AMD, MU, PYPL, COIN...)
 uv run python -m app.main scan-pcs s2
@@ -729,14 +742,22 @@ uv run python -m app.main scan-pcs s2 --long-term
 ```
 
 Los universos S2 y S3 se configuran en `constitution.yaml`
-(`s2_universe` / `s3_universe`). Para añadir o quitar tickers, edita
-esa sección directamente.
+(`s2_universe` / `s3_universe`).
 
 **Filtros PCS** (Plan Operativo S2/S3):
 - Crédito neto / ancho del spread **≥ 25%**
 - Open Interest **≥ 500 contratos en ambas patas** (short y long)
-- Ordenados por crédito/ancho desc — los top 3 que pasan aparecen en
-  una tabla destacada encima del listado completo.
+- Short strike **≤ `entrada_max` de ATLAS** cuando existe
+
+**Tablas PCS** incluyen: Short, Long, Exp, DTE, Ancho, Mid Short, Mid
+Long, Crédito, Cr/Ancho, Break-even, Caída %, Δ Short, OI Short, OI Long.
+
+**Panel de contexto** (aparece antes del top 3):
+- Precio actual del subyacente
+- IV actual con código de color: rojo < 30% / amarillo 30-40% / verde ≥ 40%
+  (umbrales de `constitution.yaml`)
+- IVR: días acumulados / 90 necesarios para que IVRankRule se active
+- Enlace directo a Yahoo Finance para verificar próximos earnings
 
 ### IV History
 
@@ -747,22 +768,20 @@ esa sección directamente.
 uv run python -m app.main iv-history
 ```
 
-`IVRankRule` se activa por ticker cuando acumula ≥ 90 días de
-snapshots diarios. Los snapshots se guardan solos con cada análisis
-— uno por día por ticker, sin necesitar ningún comando aparte.
+`IVRankRule` se activa por ticker cuando acumula ≥ 90 días de snapshots
+diarios. Los snapshots se guardan solos con cada análisis — uno por día
+por ticker, sin ningún comando aparte.
 
 ### Notas generales
 
 - `--long-term` siempre se añade al final del comando.
-- `--currency EUR` para cualquier ticker que cotice en Europa.
-- `--pcs` es compatible con `--long-term` y `--currency EUR`.
+- `--currency EUR` / `--currency CHF` para mercados europeos.
+- `--pcs` es compatible con `--long-term` y `--currency`.
+- `--no-rules` solo funciona con un ticker individual (no multi-ticker).
+- `--until YYYY-MM` solo aplica con `--no-rules`.
 - Para tickers explícitos, el watchlist **no** aplica el filtro de
-  precio — los analiza siempre.
-- El watchlist automático **sí** aplica el filtro: salta tickers cuyo
-  precio actual supera el `entrada_max` de ATLAS en más de un 10%.
-- Tickers excluidos del watchlist automático se configuran en
-  `constitution.yaml` (`watchlist.exclude`): actualmente KRKNF,
-  MC.PA, WKL, LOG.MC, PG, DEO, MAIN.
+  precio ni la lista de exclusión — los analiza siempre.
+- El watchlist automático **sí** aplica ambos filtros (precio y exclusión).
 - Open Interest solo llega con el mercado US abierto (15:30-22:00
   Madrid). Fuera de ese horario, algunos strikes mostrarán `-`.
 
