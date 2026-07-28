@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from decimal import Decimal
 from typing import Optional
 
@@ -75,6 +76,8 @@ async def _watchlist(
         console.print("[bold]Connecting to IBKR...[/]")
         await ibkr.connect()
         console.print("[green]✓ Connected[/]\n")
+
+        t_start = time.monotonic()
 
         service = AnalysisService(
             alpha_provider=alpha,
@@ -204,6 +207,10 @@ async def _watchlist(
 
         print_summary_table(summaries, long_term)
 
+        elapsed = time.monotonic() - t_start
+        mins, secs = divmod(int(elapsed), 60)
+        elapsed_str = f"{mins}m {secs}s" if mins else f"{secs}s"
+
         if skipped:
             console.print(
                 f"[dim]{skipped} ticker(s) skipped (excluded or above "
@@ -214,6 +221,7 @@ async def _watchlist(
                 f"[dim]{errors} ticker(s) errored (no options chain or "
                 f"contract qualification failed — see log above).[/]"
             )
+        console.print(f"[dim]Total time: {elapsed_str}[/]")
 
     finally:
 

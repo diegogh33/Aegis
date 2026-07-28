@@ -39,6 +39,13 @@ def analyze(
         help="Limit expirations to this month (YYYY-MM format). "
              "E.g. --until 2026-11 shows only contracts expiring by Nov 2026.",
     ),
+    top: int | None = typer.Option(
+        None,
+        "--top",
+        help="Limit the full PCS candidates table to the top N rows. "
+             "The top 3 highlighted section is always shown in full. "
+             "E.g. --top 20 shows only the 20 best combinations.",
+    ),
 ) -> None:
     """
     Analyzes one or more tickers for Cash Secured PUT candidates.
@@ -67,6 +74,7 @@ def analyze(
             pcs=pcs,
             no_rules=no_rules,
             until=until,
+            top=top,
         )
     )
 
@@ -79,6 +87,7 @@ async def _analyze(
     pcs: bool = False,
     no_rules: bool = False,
     until: str | None = None,
+    top: int | None = None,
 ) -> None:
 
     alpha = AlphaVantageProvider()
@@ -118,7 +127,8 @@ async def _analyze(
                 )
         elif len(tickers) == 1:
             await _single(
-                tickers[0], exchange, currency, long_term, service, pcs=pcs
+                tickers[0], exchange, currency, long_term, service,
+                pcs=pcs, top=top,
             )
         else:
             await _multi(tickers, exchange, currency, long_term, service)
@@ -301,6 +311,7 @@ async def _single(
     long_term: bool,
     service: AnalysisService,
     pcs: bool = False,
+    top: int | None = None,
 ) -> None:
 
     result = await service.analyze(
@@ -310,7 +321,7 @@ async def _single(
     # When --pcs is active, skip the candidates and rejected tables —
     # the user only wants the market context and PCS candidates.
     if pcs:
-        _render_pcs_table(result, ticker)
+        _render_pcs_table(result, ticker, top=top)
         return
 
     company = result.company
@@ -450,7 +461,7 @@ async def _single(
         _render_pcs_table(result, ticker)
 
 
-def _render_pcs_table(result, ticker: str) -> None:
+def _render_pcs_table(result, ticker: str, top: int | None = None) -> None:
     """Renders the PCS candidates table below the main candidates table."""
     from app.cli.shared import print_market_context
     from app.config.settings import Settings
@@ -614,11 +625,13 @@ def _render_pcs_table(result, ticker: str) -> None:
         console.print()
 
     # ── Full table ─────────────────────────────────────────────────────
+    displayed = candidates[:top] if top else candidates
+    top_suffix = f", mostrando top {top}" if top and top < len(candidates) else ""
     full_table = _make_table(
         f"PCS Candidates — {ticker} "
-        f"(crédito/ancho ≥25%, OI ≥{PCS_MIN_OI} ambas patas)"
+        f"(crédito/ancho ≥25%, OI ≥{PCS_MIN_OI} ambas patas{top_suffix})"
     )
-    for c in candidates:
+    for c in displayed:
         rank = (passing.index(c) + 1) if c in passing[:3] else None
         full_table.add_row(*_pcs_row(c, rank=rank))
 
@@ -626,6 +639,7 @@ def _render_pcs_table(result, ticker: str) -> None:
     console.print(
         f"\n[bold green]{len(passing)}[/] of [bold]{len(candidates)}[/] "
         f"PCS combinations pass all filters."
+        + (f" Showing top {top}." if top and top < len(candidates) else "")
     )
 
 
