@@ -944,3 +944,35 @@ para continuar sin que tengas que re-explicar nada.
 -   ✅ `scan-pcs s2` recorre el universo S2 y presenta candidatos PCS.
 -   ✅ `watchlist --long-term` con filtro de precio y lista de exclusión.
 -   ✅ `iv-history` mostrando 32 tickers acumulando desde 21-22 jul.
+
+------------------------------------------------------------------------
+
+# Último paso — Menú interactivo de terminal
+
+Cuando la aplicación esté completa con toda la funcionalidad deseada,
+el último paso será crear un **menú interactivo de terminal** que
+centralice todos los comandos disponibles. En vez de recordar flags y
+sintaxis, el usuario verá algo como:
+
+```
+═══════════════ AEGIS ═══════════════
+
+  1. Análisis individual (PUT)
+  2. Análisis PCS
+  3. Raw chain (sin reglas)
+  4. Watchlist ATLAS
+  5. Scan PCS S2
+  6. Scan PCS S3
+  7. IV History
+
+Selecciona opción: _
+```
+
+El menú pedirá el ticker y los parámetros necesarios para cada opción
+y ejecutará el comando correspondiente. No requiere tecnología nueva —
+es un script Python que envuelve los comandos existentes — y resuelve
+el problema de tener que recordar la sintaxis exacta de cada comando.
+
+**Este paso se implementa al final**, cuando ya no haya más
+funcionalidad que añadir, para que el menú refleje el conjunto
+completo y definitivo de opciones.
