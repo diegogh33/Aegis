@@ -182,3 +182,29 @@ s3_universe:
   - GLD
   - EWY
   - DRAM
+
+# S1: Acciones en cartera con ≥100 acciones — candidatas a Covered Calls
+# Solo tiene sentido vender calls cuando hay subida reciente significativa
+# y los earnings están fuera del vencimiento elegido.
+s1_universe:
+  - BAM
+  - MAIN
+  - O
+  - MO
+  - ENB
+  - BMY
+  - GIS
+  - PFE
+  - ZTS
+  - BEP
+  - BIP
+  - HIMS
+  - ASTS
+  - RKLB
+  - CELH
+  - NVO
+  - DLO
+  - BITO
+  - PBRA
+  - LYB
+  - IIPR

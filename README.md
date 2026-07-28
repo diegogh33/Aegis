@@ -778,6 +778,23 @@ Long, Crédito, Cr/Ancho, Break-even, Caída %, Δ Short, OI Short, OI Long.
 - IVR: días acumulados / 90 necesarios para que IVRankRule se active
 - Enlace directo a Yahoo Finance para verificar próximos earnings
 
+### Covered Calls S1 (cartera)
+
+``` powershell
+# Escanea el universo S1 (acciones en cartera con ≥100 acciones)
+# y muestra rendimiento reciente para identificar candidatos a Covered Call.
+uv run python -m app.main scan-cc
+```
+
+Muestra una tabla con: Precio actual, rendimiento 15d y 30d, mínimo y
+máximo de 52 semanas, % hasta el máximo anual, máximo de los últimos 30
+días, % por debajo del máximo de 30 días, e IV actual. Ordenada por
+rendimiento a 30 días descendente — las acciones que más han subido
+recientemente son las mejores candidatas (primas más altas, más margen
+si se ejecuta la call).
+
+El universo S1 se configura en `constitution.yaml` (`s1_universe`).
+
 ### IV History
 
 ``` powershell
