@@ -218,6 +218,7 @@ def _render_table(summaries: list[S1Summary]) -> None:
     table.add_column("Máx 30d", justify="right")
     table.add_column("% vs Máx 30d", justify="right")
     table.add_column("IV", justify="right")
+    table.add_column("Earnings")
 
     for s in summaries:
 
@@ -258,6 +259,9 @@ def _render_table(summaries: list[S1Summary]) -> None:
 
         iv_str = f"{s.iv:.1f}%" if s.iv is not None else "-"
 
+        earnings_url = f"https://finance.yahoo.com/quote/{s.ticker}/"
+        earnings_str = f"[link={earnings_url}]Yahoo →[/link]"
+
         table.add_row(
             s.ticker,
             f"${s.price:.2f}",
@@ -269,6 +273,7 @@ def _render_table(summaries: list[S1Summary]) -> None:
             f"${s.high_30d:.2f}" if s.high_30d else "-",
             from_30d_str,
             iv_str,
+            earnings_str,
         )
 
     console.print(table)
