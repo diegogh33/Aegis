@@ -24,6 +24,7 @@ class S1Summary:
     pct_to_52w_high: float | None   # % to reach 52w high
     pct_from_30d_high: float | None  # % below 30d high (0 = at high)
     iv: float | None            # current IV
+    earnings_date: str | None = None  # next earnings date from yfinance
 
 
 def scan_cc(
@@ -118,6 +119,43 @@ async def _scan_cc(currency: str) -> None:
         await ibkr.disconnect()
 
 
+def _fetch_earnings_date(ticker: str) -> str | None:
+    """
+    Fetches the next earnings date from yfinance (Yahoo Finance).
+    Returns a formatted string like '28-oct-2026' or None if unavailable.
+    Runs synchronously — call from a thread via asyncio.to_thread().
+    """
+    try:
+        import yfinance as yf
+        t = yf.Ticker(ticker)
+        cal = t.calendar
+        if not cal:
+            return None
+
+        # calendar is a dict with 'Earnings Date' key (list of dates)
+        earnings_dates = cal.get("Earnings Date", [])
+        if not earnings_dates:
+            return None
+
+        from datetime import date as date_type
+        today = date_type.today()
+
+        for d in earnings_dates:
+            # d may be a Timestamp or date
+            try:
+                if hasattr(d, "date"):
+                    d = d.date()
+                if d >= today:
+                    return d.strftime("%d-%b-%Y")
+            except Exception:
+                continue
+
+        return None
+
+    except Exception:
+        return None
+
+
 async def _fetch_summary(
     ibkr: IBKRProvider,
     ticker: str,
@@ -184,6 +222,10 @@ async def _fetch_summary(
     except Exception:
         pass  # IV is optional
 
+    # Fetch earnings date from yfinance (runs in a thread to avoid
+    # blocking the event loop)
+    earnings_date = await asyncio.to_thread(_fetch_earnings_date, ticker)
+
     return S1Summary(
         ticker=ticker,
         price=price,
@@ -195,6 +237,7 @@ async def _fetch_summary(
         pct_to_52w_high=pct_to_52w_high,
         pct_from_30d_high=pct_from_30d_high,
         iv=iv,
+        earnings_date=earnings_date,
     )
 
 
@@ -218,7 +261,7 @@ def _render_table(summaries: list[S1Summary]) -> None:
     table.add_column("Máx 30d", justify="right")
     table.add_column("% vs Máx 30d", justify="right")
     table.add_column("IV", justify="right")
-    table.add_column("Earnings")
+    table.add_column("Earnings", justify="right")
 
     for s in summaries:
 
@@ -259,8 +302,23 @@ def _render_table(summaries: list[S1Summary]) -> None:
 
         iv_str = f"{s.iv:.1f}%" if s.iv is not None else "-"
 
-        earnings_url = f"https://finance.yahoo.com/quote/{s.ticker}/"
-        earnings_str = f"[link={earnings_url}]Yahoo →[/link]"
+        # Earnings date — warn if within 45 days (risky for CC)
+        if s.earnings_date:
+            from datetime import datetime as dt_type
+            try:
+                edate = dt_type.strptime(s.earnings_date, "%d-%b-%Y").date()
+                from datetime import date as date_type
+                days_to = (edate - date_type.today()).days
+                if days_to <= 30:
+                    earnings_str = f"[bold red]{s.earnings_date} ⚠[/]"
+                elif days_to <= 45:
+                    earnings_str = f"[yellow]{s.earnings_date}[/]"
+                else:
+                    earnings_str = s.earnings_date
+            except Exception:
+                earnings_str = s.earnings_date
+        else:
+            earnings_str = "[dim]—[/]"
 
         table.add_row(
             s.ticker,
@@ -279,7 +337,9 @@ def _render_table(summaries: list[S1Summary]) -> None:
     console.print(table)
     console.print(
         "\n[dim]Verde intenso: señal fuerte (30d ≥10%, cerca de máximos). "
-        "Verde: señal positiva. Rojo: caída reciente.[/]"
+        "Verde: señal positiva. Rojo: caída reciente. "
+        "[bold red]Earnings en rojo[/dim][bold red] ⚠[/bold red][dim]: "
+        "vencimiento dentro de 30 días — evitar CC.[/]"
     )
 
 
