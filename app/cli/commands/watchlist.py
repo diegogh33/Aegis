@@ -223,6 +223,10 @@ async def _watchlist(
             )
         console.print(f"[dim]Total time: {elapsed_str}[/]")
 
+    except Exception as exc:
+        from app.cli.errors import print_error
+        print_error(exc)
+
     finally:
 
         await alpha.close()

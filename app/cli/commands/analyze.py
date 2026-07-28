@@ -135,6 +135,10 @@ async def _analyze(
 
         console.print("\n[bold green]Analysis completed[/]")
 
+    except Exception as exc:
+        from app.cli.errors import print_error
+        print_error(exc)
+
     finally:
 
         await alpha.close()

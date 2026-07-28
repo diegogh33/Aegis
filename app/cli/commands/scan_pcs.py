@@ -216,6 +216,10 @@ async def _scan_pcs(
                 f"[dim]{len(errors)} ticker(s) errored — see log above.[/]"
             )
 
+    except Exception as exc:
+        from app.cli.errors import print_error
+        print_error(exc)
+
     finally:
         await alpha.close()
         await ibkr.disconnect()
