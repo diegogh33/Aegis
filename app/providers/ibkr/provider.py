@@ -349,6 +349,12 @@ class IBKRProvider:
             symbol, exchange=exchange, currency=currency
         )
 
+        logger.debug(
+            "{symbol}: underlying price for strike selection = {price}",
+            symbol=symbol,
+            price=underlying_price,
+        )
+
         contracts: list[OptionContract] = []
 
         for expiration in candidate_expirations:
