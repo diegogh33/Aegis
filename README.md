@@ -750,6 +750,10 @@ uv run python -m app.main NOW --pcs
 uv run python -m app.main MU --pcs
 uv run python -m app.main ORCL --long-term --pcs
 
+# Limitar la tabla completa a los N mejores (el top 3 siempre se muestra entero)
+uv run python -m app.main NOW --pcs --top 20
+uv run python -m app.main MU --pcs --top 10
+
 # Scan automático del universo S2 (sistemático: AMD, MU, PYPL, COIN...)
 uv run python -m app.main scan-pcs s2
 
@@ -812,7 +816,10 @@ por ticker, sin ningún comando aparte.
 
 - `--long-term` siempre se añade al final del comando.
 - `--currency EUR` / `--currency CHF` para mercados europeos.
-- `--pcs` es compatible con `--long-term` y `--currency`.
+- `--top N` limita la tabla completa de PCS a los N mejores spreads
+  (ordenados por crédito/ancho desc). El top 3 destacado se muestra
+  siempre completo. Útil cuando hay decenas de combinaciones (ej.
+  `--top 20` en vez de ver 73 filas).
 - `--no-rules` solo funciona con un ticker individual (no multi-ticker).
 - `--until YYYY-MM` solo aplica con `--no-rules`.
 - Para tickers explícitos, el watchlist **no** aplica el filtro de
