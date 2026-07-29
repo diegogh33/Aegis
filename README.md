@@ -790,14 +790,44 @@ Long, Crédito, Cr/Ancho, Break-even, Caída %, Δ Short, OI Short, OI Long.
 uv run python -m app.main scan-cc
 ```
 
-Muestra una tabla con: Precio actual, rendimiento 15d y 30d, mínimo y
-máximo de 52 semanas, % hasta el máximo anual, máximo de los últimos 30
-días, % por debajo del máximo de 30 días, e IV actual. Ordenada por
-rendimiento a 30 días descendente — las acciones que más han subido
-recientemente son las mejores candidatas (primas más altas, más margen
-si se ejecuta la call).
+Muestra una tabla ordenada por **rendimiento a 30 días descendente** —
+las acciones que más han subido recientemente son las mejores candidatas
+para vender una Covered Call (primas más altas, más margen si se ejecuta).
 
-El universo S1 se configura en `constitution.yaml` (`s1_universe`).
+**Columnas:**
+
+| Columna | Descripción |
+|---|---|
+| Precio | Precio de cierre más reciente |
+| 15d % | Rendimiento de los últimos 15 días de mercado |
+| 30d % | Rendimiento de los últimos 30 días de mercado |
+| Mín 52w | Mínimo de 52 semanas |
+| Máx 52w | Máximo de 52 semanas |
+| % al Máx 52w | Cuánto tiene que subir desde el precio actual para alcanzar el máximo anual |
+| Máx 30d | Precio máximo de los últimos 30 días |
+| % vs Máx 30d | Cuánto está por debajo del máximo de 30 días (0% = en el máximo) |
+| HV 30d | Volatilidad histórica a 30 días — proxy de la prima que ofrecerán las calls |
+| Earnings | Próxima fecha de resultados (vía yfinance) |
+
+**Código de colores:**
+- **30d % verde intenso** (≥10%): señal fuerte — buena subida reciente, prima alta.
+- **30d % verde**: señal positiva.
+- **30d % rojo**: caída reciente — evitar vender calls en acciones que caen.
+- **% al Máx 52w verde intenso** (≤5%): cerca del máximo anual — momento óptimo para call.
+- **% vs Máx 30d verde** (≤5%): en o cerca del máximo reciente — buen momento.
+- **Earnings rojo ⚠** (≤30 días): earnings dentro del vencimiento — **evitar CC**.
+- **Earnings amarillo** (31-45 días): precaución — verificar vencimiento elegido.
+
+**Fuentes de datos:**
+- Precios históricos: IBKR `reqHistoricalDataAsync` (no consume cupo de Alpha Vantage).
+- HV 30d: IBKR generic tick 104.
+- Earnings: yfinance (Yahoo Finance). ETFs y algunos ADRs muestran `—`.
+
+**Notas:**
+- PBRA (PBR.A en NYSE, Petrobras preferente) se cualifica automáticamente
+  con el formato correcto para IBKR.
+- ETFs como BITO no tienen fecha de earnings — muestran `—` sin error.
+- El universo S1 se configura en `constitution.yaml` (`s1_universe`).
 
 ### IV History
 
