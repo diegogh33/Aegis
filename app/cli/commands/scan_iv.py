@@ -114,6 +114,23 @@ async def _scan_iv(
         table.add_column("IV", justify="right")
         table.add_column("Distance", justify="right")
 
+        if results:
+            # Log the first item's structure for diagnosis
+            item0 = results[0]
+            from loguru import logger
+            logger.debug(
+                "ScanData fields: rank={rank}, distance={dist}, "
+                "benchmark={bench}, projection={proj}, "
+                "contractDetails type={cd_type}, "
+                "contractDetails={cd}",
+                rank=item0.rank,
+                dist=item0.distance,
+                bench=item0.benchmark,
+                proj=item0.projection,
+                cd_type=type(item0.contractDetails).__name__,
+                cd=item0.contractDetails,
+            )
+
         for i, item in enumerate(results, 1):
             cd = item.contractDetails
             contract = cd.contract if cd else None
