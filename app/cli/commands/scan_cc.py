@@ -122,17 +122,30 @@ async def _scan_cc(currency: str) -> None:
 def _fetch_earnings_date(ticker: str) -> str | None:
     """
     Fetches the next earnings date from yfinance (Yahoo Finance).
-    Returns a formatted string like '28-oct-2026' or None if unavailable.
+    Returns a formatted string like '28-Aug-2026' or None if unavailable.
+    ETFs, crypto ETFs (BITO) and some ADRs (PBRA) don't have earnings —
+    yfinance raises errors for these which are silently suppressed.
     Runs synchronously — call from a thread via asyncio.to_thread().
     """
     try:
+        import contextlib
+        import io
+        import logging
         import yfinance as yf
+
+        # yfinance logs HTTP errors to the 'yfinance' logger and sometimes
+        # to stderr. Suppress both for tickers without earnings data.
+        logging.getLogger("yfinance").setLevel(logging.CRITICAL)
+
         t = yf.Ticker(ticker)
-        cal = t.calendar
+
+        # Suppress any stderr output from yfinance internals
+        with contextlib.redirect_stderr(io.StringIO()):
+            cal = t.calendar
+
         if not cal:
             return None
 
-        # calendar is a dict with 'Earnings Date' key (list of dates)
         earnings_dates = cal.get("Earnings Date", [])
         if not earnings_dates:
             return None
@@ -141,7 +154,6 @@ def _fetch_earnings_date(ticker: str) -> str | None:
         today = date_type.today()
 
         for d in earnings_dates:
-            # d may be a Timestamp or date
             try:
                 if hasattr(d, "date"):
                     d = d.date()
@@ -208,19 +220,20 @@ async def _fetch_summary(
     pct_to_52w_high = (high_52w - price) / price * 100
     pct_from_30d_high = (high_30d - price) / price * 100
 
-    # Current IV from market data ticker (optional — stock IV is less
-    # reliable than option IV, but gives a useful ballpark)
+    # Historical Volatility (30d) via generic tick 104.
+    # More reliable than impliedVolatility for individual stocks.
+    # Gives a useful proxy for how much premium the options are offering.
     iv: float | None = None
     try:
         import math
         ibkr.ib.reqMktData(contract, "104", False, False)  # type: ignore[arg-type]
-        await asyncio.sleep(2)
+        await asyncio.sleep(3)
         t = ibkr.ib.ticker(contract)  # type: ignore[arg-type]
-        if t and t.impliedVolatility and not math.isnan(t.impliedVolatility):
-            iv = t.impliedVolatility * 100
+        if t and t.histVolatility and not math.isnan(t.histVolatility):
+            iv = t.histVolatility
         ibkr.ib.cancelMktData(contract)  # type: ignore[arg-type]
     except Exception:
-        pass  # IV is optional
+        pass  # HV is optional
 
     # Fetch earnings date from yfinance (runs in a thread to avoid
     # blocking the event loop)
@@ -260,7 +273,7 @@ def _render_table(summaries: list[S1Summary]) -> None:
     table.add_column("% al Máx 52w", justify="right")
     table.add_column("Máx 30d", justify="right")
     table.add_column("% vs Máx 30d", justify="right")
-    table.add_column("IV", justify="right")
+    table.add_column("HV 30d", justify="right")
     table.add_column("Earnings", justify="right")
 
     for s in summaries:
