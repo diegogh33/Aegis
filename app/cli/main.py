@@ -5,6 +5,7 @@ import typer
 from app.cli.commands.analyze import analyze
 from app.cli.commands.iv_history import iv_history
 from app.cli.commands.scan_cc import scan_cc
+from app.cli.commands.scan_iv import scan_iv
 from app.cli.commands.scan_pcs import scan_pcs
 from app.cli.commands.watchlist import watchlist
 
@@ -17,9 +18,10 @@ app.command()(watchlist)
 app.command(name="iv-history")(iv_history)
 app.command(name="scan-pcs")(scan_pcs)
 app.command(name="scan-cc")(scan_cc)
+app.command(name="scan-iv")(scan_iv)
 
 _KNOWN_COMMANDS = {
-    "analyze", "watchlist", "iv-history", "scan-pcs", "scan-cc",
+    "analyze", "watchlist", "iv-history", "scan-pcs", "scan-cc", "scan-iv",
     "--help", "-h", "--version",
 }
 
