@@ -410,6 +410,20 @@ class IBKRProvider:
             # objetivo, no en los N más cercanos al precio (que en
             # subyacentes con IV alta, como DRAM ~95%, dejan fuera los
             # strikes realmente relevantes).
+            # Filter out deep ITM strikes (strike > underlying_price)
+            # before delta-based selection. After a large gap move (e.g.
+            # LMND -24% on earnings), the old ATM strikes are now ITM and
+            # shouldn't be candidates for selling PUTs. We keep strikes
+            # up to 10% above the current price to allow for some cushion.
+            otm_threshold = underlying_price * Decimal("1.10")
+            otm_contracts = [
+                c for c in expiration_contracts
+                if c.strike <= otm_threshold
+            ]
+            # Only apply the filter if it leaves at least some contracts
+            if otm_contracts:
+                expiration_contracts = otm_contracts
+
             atm_strike = _closest_strikes(
                 expiration_contracts, underlying_price, limit=1
             )
