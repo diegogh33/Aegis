@@ -177,7 +177,15 @@ async def _fetch_summary(
 
     from ib_async import Contract, Stock
 
-    stock = Stock(ticker, "SMART", currency)
+    # Some tickers need special handling in IBKR:
+    # PBR.A (Petrobras preferred) must be qualified with primaryExch=NYSE
+    # to avoid ambiguity with other exchanges.
+    if ticker == "PBRA" or ticker == "PBR.A":
+        stock = Stock("PBR A", "SMART", currency)
+        stock.primaryExchange = "NYSE"
+    else:
+        stock = Stock(ticker, "SMART", currency)
+
     qualified = await ibkr.ib.qualifyContractsAsync(stock)
     if not qualified:
         raise ValueError(f"Cannot qualify {ticker}")
