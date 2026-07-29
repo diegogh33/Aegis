@@ -272,17 +272,29 @@ class MarketDataProvider:
         Fetches the current market price for the underlying (stock)
         contract itself, independent of any option's market data.
 
-        This exists because option contracts on accounts without an
-        options market data subscription (IBKR error 10091) never
-        receive a usable underlying_price via their own ticker - but
-        the stock itself usually has real market data available. This
-        lets AnalysisService price contracts even when their own
-        underlying_price came back empty.
+        Prefers the bid/ask mid over marketPrice() (last trade) because
+        last can be stale during pre-market gaps or halts (confirmed with
+        LMND: stock fell -24% on earnings pre-market, but marketPrice()
+        still returned yesterday's close ~$62 instead of the real ~$47).
+        Bid/ask updates in real time even before the open.
+        Falls back to marketPrice() if bid/ask not available.
         """
 
         ticker = await self._request_ticker(contract)
 
-        price = _decimal_or_none(ticker.marketPrice())
+        import math
+
+        # Prefer bid/ask mid — updates in real time even pre-market
+        bid = ticker.bid
+        ask = ticker.ask
+        if (
+            bid is not None and ask is not None
+            and not math.isnan(bid) and not math.isnan(ask)
+            and bid > 0 and ask > 0
+        ):
+            price = _decimal_or_none((bid + ask) / 2)
+        else:
+            price = _decimal_or_none(ticker.marketPrice())
 
         if price is None:
             logger.debug(
