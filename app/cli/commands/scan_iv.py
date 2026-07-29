@@ -115,30 +115,30 @@ async def _scan_iv(
         table.add_column("Distance", justify="right")
 
         for i, item in enumerate(results, 1):
-            contract = item.contractDetails.contract if item.contractDetails else None
+            cd = item.contractDetails
+            contract = cd.contract if cd else None
             ticker = contract.symbol if contract else "—"
-            company = (
-                item.contractDetails.longName
-                if item.contractDetails and item.contractDetails.longName
-                else "—"
-            )
+            company = cd.longName[:35] if (cd and cd.longName) else "—"
 
-            # Distance is provided by IBKR scanner as a % metric
-            distance = f"{float(item.distance):.1f}%" if item.distance else "—"
+            # distance is the IV rank metric from IBKR scanner
+            # benchmark is the actual IV value when available
+            iv_str = f"{float(item.benchmark):.1f}%" if item.benchmark else "—"
+            dist_str = f"{float(item.distance):.1f}" if item.distance else "—"
 
             table.add_row(
                 str(i),
                 ticker,
-                company[:35] if company != "—" else "—",
-                "—",   # price requires a separate mkt data request
-                "—",   # IV same — scanner gives ranking, not raw IV
-                distance,
+                company,
+                "—",   # real-time price requires a separate mkt data request
+                iv_str,
+                dist_str,
             )
 
         console.print(table)
         console.print(
-            "\n[dim]'Distance' is IBKR's IV percentile ranking metric. "
-            "Higher = more elevated IV relative to historical norm.[/]"
+            "\n[dim]'IV': implied volatility reported by the scanner. "
+            "'Distance': IBKR's IV rank metric (higher = more elevated "
+            "vs historical norm).[/]"
         )
         console.print(
             "[dim]Run [bold]uv run python -m app.main TICKER --pcs[/] "
