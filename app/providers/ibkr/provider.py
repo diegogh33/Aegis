@@ -420,6 +420,26 @@ class IBKRProvider:
                 atm_market = await self.get_market_data(atm_strike[0])
                 reference_iv = atm_market.implied_volatility
 
+                # Cap reference_iv to avoid earnings-gap IV spikes
+                # distorting strike selection. With IV at 300%+, even
+                # deep ITM strikes appear to have target-like deltas,
+                # causing the scanner to select completely wrong strikes
+                # (confirmed with LMND: -24% earnings gap, IV 300%+,
+                # scanner selecting $60 strikes when price was $47).
+                if reference_iv is not None:
+                    max_iv = Decimal("1.50")  # 150% cap
+                    if reference_iv > max_iv:
+                        logger.debug(
+                            "{symbol} {expiration}: reference IV {iv:.0%} "
+                            "exceeds cap of {cap:.0%} — capping to avoid "
+                            "distorted strike selection on earnings gaps.",
+                            symbol=symbol,
+                            expiration=expiration,
+                            iv=reference_iv,
+                            cap=max_iv,
+                        )
+                        reference_iv = max_iv
+
             if reference_iv is None:
 
                 logger.debug(
