@@ -102,64 +102,106 @@ async def _scan_iv(
             f"[green]Found {len(results)} candidates.[/]\n"
         )
 
+        if results:
+            from loguru import logger
+            item0 = results[0]
+            logger.debug(
+                "Scanner returned {n} results. First item symbol={sym}",
+                n=len(results),
+                sym=(item0.contractDetails.contract.symbol  # type: ignore[union-attr]
+                     if item0.contractDetails and item0.contractDetails.contract
+                     else "?"),
+            )
+
+        # Collect tickers and contracts from scanner
+        from ib_async import Contract as IBContract
+        scanner_items: list[IBContract] = []
+        for item in results:
+            cd = item.contractDetails
+            if cd and cd.contract and cd.contract.symbol:
+                scanner_items.append(cd.contract)  # type: ignore[arg-type]
+
+        if not scanner_items:
+            console.print("[yellow]Scanner returned no valid contracts.[/]")
+            return
+
+        console.print(
+            f"Fetching price and IV for {len(scanner_items)} tickers...\n"
+        )
+
+        # Fetch price and IV for each ticker via market data
+        from ib_async import Stock
+        import math
+
+        rows: list[tuple[str, float | None, float | None]] = []
+        for contract in scanner_items[:top]:
+            ticker_sym = contract.symbol
+            try:
+                stock = Stock(ticker_sym, "SMART", "USD")
+                qualified_list = await ibkr.ib.qualifyContractsAsync(stock)
+                if not qualified_list or qualified_list[0] is None:
+                    rows.append((ticker_sym, None, None))
+                    continue
+
+                q = qualified_list[0]
+                ibkr.ib.reqMktData(q, "106", False, False)  # type: ignore[arg-type]
+                await asyncio.sleep(2)
+                t = ibkr.ib.ticker(q)  # type: ignore[arg-type]
+
+                price: float | None = None
+                iv: float | None = None
+
+                if t:
+                    bid = t.bid
+                    ask = t.ask
+                    if bid and ask and not math.isnan(bid) and not math.isnan(ask) and bid > 0:
+                        price = (bid + ask) / 2
+                    elif t.last and not math.isnan(t.last):
+                        price = t.last
+
+                    if t.impliedVolatility and not math.isnan(t.impliedVolatility):
+                        iv = t.impliedVolatility * 100
+
+                ibkr.ib.cancelMktData(q)  # type: ignore[arg-type]
+                rows.append((ticker_sym, price, iv))
+
+            except Exception:
+                rows.append((ticker_sym, None, None))
+
+        # Sort by IV descending
+        rows.sort(key=lambda r: r[2] if r[2] is not None else -1, reverse=True)
+
         table = Table(
             title=f"High IV Stocks — US Market "
-                  f"(top {len(results)}, sorted by IV desc)"
+                  f"(top {len(rows)}, sorted by IV desc)"
         )
 
         table.add_column("#", justify="right", width=3)
         table.add_column("Ticker", style="bold")
-        table.add_column("Company")
         table.add_column("Precio", justify="right")
         table.add_column("IV", justify="right")
-        table.add_column("Distance", justify="right")
 
-        if results:
-            # Log the first item's structure for diagnosis
-            item0 = results[0]
-            from loguru import logger
-            logger.debug(
-                "ScanData fields: rank={rank}, distance={dist}, "
-                "benchmark={bench}, projection={proj}, "
-                "contractDetails type={cd_type}, "
-                "contractDetails={cd}",
-                rank=item0.rank,
-                dist=item0.distance,
-                bench=item0.benchmark,
-                proj=item0.projection,
-                cd_type=type(item0.contractDetails).__name__,
-                cd=item0.contractDetails,
-            )
+        for i, (ticker_sym, price, iv) in enumerate(rows, 1):
+            price_str = f"${price:.2f}" if price else "—"
+            iv_str = f"{iv:.1f}%" if iv else "—"
 
-        for i, item in enumerate(results, 1):
-            cd = item.contractDetails
-            contract = cd.contract if cd else None
-            ticker = contract.symbol if contract else "—"
-            company = cd.longName[:35] if (cd and cd.longName) else "—"
+            if iv and iv >= 80:
+                iv_str = f"[bold green]{iv_str}[/]"
+            elif iv and iv >= 50:
+                iv_str = f"[green]{iv_str}[/]"
+            elif iv and iv >= 30:
+                iv_str = f"[yellow]{iv_str}[/]"
 
-            # distance is the IV rank metric from IBKR scanner
-            # benchmark is the actual IV value when available
-            iv_str = f"{float(item.benchmark):.1f}%" if item.benchmark else "—"
-            dist_str = f"{float(item.distance):.1f}" if item.distance else "—"
-
-            table.add_row(
-                str(i),
-                ticker,
-                company,
-                "—",   # real-time price requires a separate mkt data request
-                iv_str,
-                dist_str,
-            )
+            table.add_row(str(i), ticker_sym, price_str, iv_str)
 
         console.print(table)
         console.print(
-            "\n[dim]'IV': implied volatility reported by the scanner. "
-            "'Distance': IBKR's IV rank metric (higher = more elevated "
-            "vs historical norm).[/]"
+            "\n[dim]Verde intenso: IV ≥80% (excelente para venta de primas). "
+            "Verde: IV ≥50%. Amarillo: IV ≥30%.[/]"
         )
         console.print(
-            "[dim]Run [bold]uv run python -m app.main TICKER --pcs[/] "
-            "on any of these for a full PCS analysis.[/]"
+            "[dim]Ejecuta [bold]uv run python -m app.main TICKER --pcs[/] "
+            "para análisis PCS completo de cualquier candidato.[/]"
         )
 
     except Exception as exc:
