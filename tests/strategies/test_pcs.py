@@ -15,12 +15,16 @@ def _contract(
     open_interest: int | None = 600,
     dte: int = 35,
 ):
+    # Set underlying_price 25% above strike so contracts are OTM by default.
+    # Tests that specifically test the ITM filter set their own underlying_price.
+    underlying_price = Decimal(str(round(strike * 1.25, 2)))
     return replace(
         build_option(delta=-0.20, dte=dte),
         strike=Decimal(str(strike)),
         bid=Decimal(str(bid)),
         ask=Decimal(str(ask)),
         open_interest=open_interest,
+        underlying_price=underlying_price,
     )
 
 
@@ -100,7 +104,44 @@ def test_passing_spreads_sorted_before_failing():
     assert candidates[0].long.strike == Decimal("110")
 
 
-def test_pcs_min_oi_constant_is_500():
+def test_itm_short_strike_is_excluded():
+    """
+    Regression test from real NKE case: price $38.75, but strike $40
+    was appearing as a top PCS candidate despite being ITM. A short PUT
+    with strike above the current price means buying shares above market
+    value if assigned — never valid for a PCS.
+    """
+    # Short strike $40 ITM (price $38.75)
+    itm_short = replace(
+        _contract(strike=40, bid=2.87, ask=2.87),
+        underlying_price=Decimal("38.75"),
+    )
+    long = replace(
+        _contract(strike=35, bid=0.74, ask=0.74),
+        underlying_price=Decimal("38.75"),
+    )
+
+    candidates = find_pcs_candidates([itm_short, long])
+
+    # ITM short should produce no candidates
+    assert len(candidates) == 0
+
+
+def test_otm_short_strike_is_included():
+    """OTM short strike (below price) should still produce candidates."""
+    otm_short = replace(
+        _contract(strike=36, bid=2.00, ask=2.00),
+        underlying_price=Decimal("38.75"),
+    )
+    long = replace(
+        _contract(strike=32, bid=0.50, ask=0.50),
+        underlying_price=Decimal("38.75"),
+    )
+
+    candidates = find_pcs_candidates([otm_short, long])
+
+    assert len(candidates) == 1
+    assert candidates[0].short.strike == Decimal("36")
     assert PCS_MIN_OI == 500
 
 

@@ -130,6 +130,18 @@ def find_pcs_candidates(
             if short_mid is None:
                 continue
 
+            # Short strike must be at or below the current underlying
+            # price — an ITM short PUT means buying shares above market
+            # price if assigned, which is never the intent for a PCS.
+            # Confirmed with NKE: price $38.75, strike $40 was appearing
+            # as a top candidate despite being ITM.
+            if (
+                short.underlying_price is not None
+                and short.underlying_price > 0
+                and short.strike > short.underlying_price
+            ):
+                continue
+
             for long in sorted_contracts[i + 1:]:
 
                 long_mid = _mid(long)
