@@ -19,12 +19,14 @@ def _contract(
     open_interest: int | None = 600,
     dte: int = 35,
 ):
+    underlying_price = Decimal(str(round(strike * 1.25, 2)))
     return replace(
         build_option(delta=-0.20, dte=dte),
         strike=Decimal(str(strike)),
         bid=Decimal(str(bid)),
         ask=Decimal(str(ask)),
         open_interest=open_interest,
+        underlying_price=underlying_price,
     )
 
 

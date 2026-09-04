@@ -829,6 +829,39 @@ para vender una Covered Call (primas más altas, más margen si se ejecuta).
 - ETFs como BITO no tienen fecha de earnings — muestran `—` sin error.
 - El universo S1 se configura en `constitution.yaml` (`s1_universe`).
 
+### IV Scanner — mercado completo
+
+``` powershell
+# Escanea todo el mercado US buscando acciones con IV más alta
+uv run python -m app.main scan-iv
+
+# Con filtros personalizados
+uv run python -m app.main scan-iv --top 10 --min-price 20
+uv run python -m app.main scan-iv --top 50 --min-price 30 --min-opt-volume 2000
+```
+
+A diferencia de `scan-pcs` que usa un universo predefinido, `scan-iv`
+usa el scanner interno de IBKR (`HIGH_OPT_IMP_VOLAT`) que cubre **todas
+las acciones y ETFs del mercado US** en tiempo real. No hace falta
+mantener ninguna lista — el mercado es el universo.
+
+**Opciones:**
+
+| Flag | Default | Descripción |
+|---|---|---|
+| `--top N` | 25 | Número de resultados (máx. 50) |
+| `--min-price X` | $10 | Precio mínimo del subyacente |
+| `--min-opt-volume N` | 500 | Volumen mínimo diario de opciones |
+
+**Tabla resultante:** Ticker, Precio, IV — ordenada por IV descendente.
+Color coding: verde intenso ≥80%, verde ≥50%, amarillo ≥30%.
+
+**Nota:** muchos tickers con IV >200% son small caps con earnings
+recientes o eventos corporativos — liquidez muy baja, spreads enormes.
+Filtrar con `--min-price 20 --min-opt-volume 1000` da resultados más
+operables. Una vez identificado un candidato interesante, ejecuta
+`app.main TICKER --pcs` para el análisis PCS completo.
+
 ### IV History
 
 ``` powershell
@@ -846,6 +879,7 @@ por ticker, sin ningún comando aparte.
 
 - `--long-term` siempre se añade al final del comando.
 - `--currency EUR` / `--currency CHF` para mercados europeos.
+- `--pcs` es compatible con `--long-term` y `--currency`.
 - `--top N` limita la tabla completa de PCS a los N mejores spreads
   (ordenados por crédito/ancho desc). El top 3 destacado se muestra
   siempre completo. Útil cuando hay decenas de combinaciones (ej.
@@ -857,6 +891,9 @@ por ticker, sin ningún comando aparte.
 - El watchlist automático **sí** aplica ambos filtros (precio y exclusión).
 - Open Interest solo llega con el mercado US abierto (15:30-22:00
   Madrid). Fuera de ese horario, algunos strikes mostrarán `-`.
+- `scan-iv` requiere mercado abierto para obtener IV en tiempo real.
+- `scan-cc` obtiene precios históricos de IBKR (sin cupo de Alpha
+  Vantage) y earnings de Yahoo Finance via yfinance.
 
 ------------------------------------------------------------------------
 
@@ -976,28 +1013,29 @@ Claude leerá el README (sección "Lo que funciona hoy"), consultará la
 memoria de la cuenta donde está el contexto de Aegis, y estará listo
 para continuar sin que tengas que re-explicar nada.
 
-## Pendientes al cierre de la última sesión (22-jul-2026)
+## Pendientes al cierre de la última sesión (29-jul-2026)
 
+-   **Optimizar timing del watchlist** — 11 minutos para 6 tickers es
+    mucho. El cuello de botella es el poll de OI (10s por contrato).
+    Pendiente investigar paralelización dentro del lote.
+-   **Menú interactivo de terminal** — último paso del proyecto, una
+    vez que la funcionalidad esté completa.
 -   **Recordar siempre probar con mercado US abierto (15:30-22:00
-    Madrid) antes de dar algo por resuelto** — Diego lo pidió
-    explícitamente y sigue vigente.
--   IVRankRule acumulando histórico — 90 días por ticker para que
-    empiece a filtrar de verdad. No hay nada que hacer, se acumula
-    solo con el uso normal.
+    Madrid) antes de dar algo por resuelto.**
 
-### Todo validado con mercado abierto el 22-jul
+### Validado en sesión del 29-jul
 
--   ✅ Timing por contrato: price 2.0s, greeks 0.0s, OI 0.0s en la
-    mayoría. Solo strikes muy poco líquidos tardan hasta 4s en OI.
--   ✅ Open Interest llegando correctamente — `putOpenInterest` es el
-    campo correcto para PUT individuales (no `openInterest`).
--   ✅ Multi-ticker tabla resumen con Bid/Ask/Delta/IV/Open Int reales.
--   ✅ `--pcs` funcionando: top 3 destacados, columnas Caída % y Δ
-    Short. Confirmado con MU: $810/$800 y $820/$800 identificados
-    correctamente como candidatos principales.
--   ✅ `scan-pcs s2` recorre el universo S2 y presenta candidatos PCS.
--   ✅ `watchlist --long-term` con filtro de precio y lista de exclusión.
--   ✅ `iv-history` mostrando 32 tickers acumulando desde 21-22 jul.
+-   ✅ `scan-pcs s2` completo con panel de contexto por ticker.
+-   ✅ `--top N` en `--pcs` funcionando (NOW --pcs --top 20).
+-   ✅ `watchlist --long-term` con tiempo total al final (11m 1s).
+-   ✅ `scan-cc` con PBRA corregido y HV 30d reales.
+-   ✅ `scan-iv` funcionando — escanea mercado US completo con IV real,
+    precio y color coding. KRE/XOP/XLE eliminados del S2.
+-   ✅ Fix precio subyacente con bid/ask mid para gaps de earnings
+    (confirmado con LMND -24%).
+-   ✅ Fix selección de strikes en gaps extremos — filtro ITM + cap IV
+    (confirmado con LMND: strikes correctos ~$50 vs $60 antes del fix).
+
 
 ------------------------------------------------------------------------
 
